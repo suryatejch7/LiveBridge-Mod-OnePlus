@@ -1,0 +1,244 @@
+package com.appsfolder.livebridge.liveupdate
+
+import android.content.Context
+import java.util.Locale
+
+class ConverterPrefs(context: Context) {
+    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    fun getPackageRulesRaw(): String {
+        val current = prefs.getString(KEY_PACKAGE_RULES, "") ?: ""
+        if (current.isNotBlank()) {
+            return current
+        }
+
+        return prefs.getString(KEY_PACKAGE_FILTER_LEGACY, "") ?: ""
+    }
+
+    fun setPackageRulesRaw(value: String?) {
+        val normalized = value?.trim().orEmpty()
+        prefs.edit()
+            .putString(KEY_PACKAGE_RULES, normalized)
+            .putString(KEY_PACKAGE_FILTER_LEGACY, normalized)
+            .apply()
+    }
+
+    fun getPackageMode(): String {
+        val raw = prefs.getString(KEY_PACKAGE_MODE, PackageMode.ALL.id) ?: PackageMode.ALL.id
+        return PackageMode.from(raw).id
+    }
+
+    fun setPackageMode(value: String?) {
+        val mode = PackageMode.from(value)
+        prefs.edit().putString(KEY_PACKAGE_MODE, mode.id).apply()
+    }
+
+    fun getOnlyWithProgress(): Boolean {
+        return prefs.getBoolean(KEY_ONLY_WITH_PROGRESS, true)
+    }
+
+    fun setOnlyWithProgress(value: Boolean) {
+        prefs.edit().putBoolean(KEY_ONLY_WITH_PROGRESS, value).apply()
+    }
+
+    fun getConverterEnabled(): Boolean {
+        return prefs.getBoolean(KEY_CONVERTER_ENABLED, true)
+    }
+
+    fun setConverterEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_CONVERTER_ENABLED, value).apply()
+    }
+
+    fun getSmartStatusDetectionEnabled(): Boolean {
+        return prefs.getBoolean(KEY_SMART_STATUS_ENABLED, true)
+    }
+
+    fun setSmartStatusDetectionEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_SMART_STATUS_ENABLED, value).apply()
+    }
+
+    fun getOtpDetectionEnabled(): Boolean {
+        return prefs.getBoolean(KEY_OTP_DETECTION_ENABLED, true)
+    }
+
+    fun setOtpDetectionEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_OTP_DETECTION_ENABLED, value).apply()
+    }
+
+    fun getOtpAutoCopyEnabled(): Boolean {
+        return prefs.getBoolean(KEY_OTP_AUTO_COPY_ENABLED, false)
+    }
+
+    fun setOtpAutoCopyEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_OTP_AUTO_COPY_ENABLED, value).apply()
+    }
+
+    fun getOtpPackageRulesRaw(): String {
+        return prefs.getString(KEY_OTP_PACKAGE_RULES, "") ?: ""
+    }
+
+    fun setOtpPackageRulesRaw(value: String?) {
+        val normalized = value?.trim().orEmpty()
+        prefs.edit()
+            .putString(KEY_OTP_PACKAGE_RULES, normalized)
+            .apply()
+    }
+
+    fun getOtpPackageMode(): String {
+        val raw = prefs.getString(KEY_OTP_PACKAGE_MODE, PackageMode.ALL.id) ?: PackageMode.ALL.id
+        return PackageMode.from(raw).id
+    }
+
+    fun setOtpPackageMode(value: String?) {
+        val mode = PackageMode.from(value)
+        prefs.edit().putString(KEY_OTP_PACKAGE_MODE, mode.id).apply()
+    }
+
+    fun getPixelJokeBypassEnabled(): Boolean {
+        return prefs.getBoolean(KEY_PIXEL_JOKE_BYPASS_ENABLED, false)
+    }
+
+    fun setPixelJokeBypassEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_PIXEL_JOKE_BYPASS_ENABLED, value).apply()
+    }
+
+    fun getAppListAccessGranted(): Boolean {
+        return prefs.getBoolean(KEY_APP_LIST_ACCESS_GRANTED, false)
+    }
+
+    fun setAppListAccessGranted(value: Boolean) {
+        prefs.edit().putBoolean(KEY_APP_LIST_ACCESS_GRANTED, value).apply()
+    }
+
+    fun getBackgroundWarningDismissed(): Boolean {
+        return prefs.getBoolean(KEY_BACKGROUND_WARNING_DISMISSED, false)
+    }
+
+    fun setBackgroundWarningDismissed(value: Boolean) {
+        prefs.edit().putBoolean(KEY_BACKGROUND_WARNING_DISMISSED, value).apply()
+    }
+
+    fun getSamsungWarningDismissed(): Boolean {
+        return prefs.getBoolean(KEY_SAMSUNG_WARNING_DISMISSED, false)
+    }
+
+    fun setSamsungWarningDismissed(value: Boolean) {
+        prefs.edit().putBoolean(KEY_SAMSUNG_WARNING_DISMISSED, value).apply()
+    }
+
+    fun hasExpandedSectionsState(): Boolean {
+        return prefs.getBoolean(KEY_EXPANDED_SECTIONS_SET, false)
+    }
+
+    fun getExpandedSectionsRaw(): String {
+        return prefs.getString(KEY_EXPANDED_SECTIONS, "") ?: ""
+    }
+
+    fun setExpandedSectionsRaw(value: String?) {
+        val normalized = value?.trim().orEmpty()
+        prefs.edit()
+            .putString(KEY_EXPANDED_SECTIONS, normalized)
+            .putBoolean(KEY_EXPANDED_SECTIONS_SET, true)
+            .apply()
+    }
+
+    fun getAppPresentationOverridesRaw(): String {
+        return prefs.getString(KEY_APP_PRESENTATION_OVERRIDES, "") ?: ""
+    }
+
+    fun setAppPresentationOverridesRaw(value: String?) {
+        val normalized = value?.trim().orEmpty()
+        prefs.edit().putString(KEY_APP_PRESENTATION_OVERRIDES, normalized).apply()
+    }
+
+    fun getCustomParserDictionaryRaw(): String? {
+        val value = prefs.getString(KEY_CUSTOM_PARSER_DICTIONARY, null)?.trim().orEmpty()
+        return value.ifBlank { null }
+    }
+
+    fun setCustomParserDictionaryRaw(value: String?) {
+        val normalized = value?.trim().orEmpty()
+        prefs.edit().putString(KEY_CUSTOM_PARSER_DICTIONARY, normalized.ifBlank { null }).apply()
+    }
+
+    fun clearCustomParserDictionary() {
+        prefs.edit().remove(KEY_CUSTOM_PARSER_DICTIONARY).apply()
+    }
+
+    fun hasCustomParserDictionary(): Boolean {
+        return !getCustomParserDictionaryRaw().isNullOrBlank()
+    }
+
+    fun isPackageAllowed(packageName: String): Boolean {
+        val mode = PackageMode.from(getPackageMode())
+        val packages = parsePackageRules(getPackageRulesRaw())
+
+        if (packages.isEmpty()) {
+            return true
+        }
+
+        return when (mode) {
+            PackageMode.ALL -> true
+            PackageMode.INCLUDE -> packageName in packages
+            PackageMode.EXCLUDE -> packageName !in packages
+        }
+    }
+
+    fun isOtpPackageAllowed(packageName: String): Boolean {
+        val mode = PackageMode.from(getOtpPackageMode())
+        val packages = parsePackageRules(getOtpPackageRulesRaw())
+
+        if (packages.isEmpty()) {
+            return true
+        }
+
+        return when (mode) {
+            PackageMode.ALL -> true
+            PackageMode.INCLUDE -> packageName in packages
+            PackageMode.EXCLUDE -> packageName !in packages
+        }
+    }
+
+    private fun parsePackageRules(raw: String): Set<String> {
+        return raw
+            .split(',', ';', '\n', '\r', '\t', ' ')
+            .map { it.trim().lowercase(Locale.ROOT) }
+            .filter { it.isNotBlank() }
+            .toSet()
+    }
+
+    private enum class PackageMode(val id: String) {
+        ALL("all"),
+        INCLUDE("include"),
+        EXCLUDE("exclude");
+
+        companion object {
+            fun from(raw: String?): PackageMode {
+                return entries.firstOrNull { it.id == raw } ?: ALL
+            }
+        }
+    }
+
+    companion object {
+        private const val PREFS_NAME = "live_bridge_prefs"
+        private const val KEY_PACKAGE_RULES = "package_rules"
+        private const val KEY_PACKAGE_MODE = "package_mode"
+        private const val KEY_ONLY_WITH_PROGRESS = "only_with_progress"
+        private const val KEY_CONVERTER_ENABLED = "converter_enabled"
+        private const val KEY_SMART_STATUS_ENABLED = "smart_status_enabled"
+        private const val KEY_OTP_DETECTION_ENABLED = "otp_detection_enabled"
+        private const val KEY_OTP_AUTO_COPY_ENABLED = "otp_auto_copy_enabled"
+        private const val KEY_OTP_PACKAGE_RULES = "otp_package_rules"
+        private const val KEY_OTP_PACKAGE_MODE = "otp_package_mode"
+        private const val KEY_PIXEL_JOKE_BYPASS_ENABLED = "pixel_joke_bypass_enabled"
+        private const val KEY_APP_LIST_ACCESS_GRANTED = "app_list_access_granted"
+        private const val KEY_BACKGROUND_WARNING_DISMISSED = "background_warning_dismissed"
+        private const val KEY_SAMSUNG_WARNING_DISMISSED = "samsung_warning_dismissed"
+        private const val KEY_EXPANDED_SECTIONS = "expanded_sections"
+        private const val KEY_EXPANDED_SECTIONS_SET = "expanded_sections_set"
+        private const val KEY_APP_PRESENTATION_OVERRIDES = "app_presentation_overrides"
+        private const val KEY_CUSTOM_PARSER_DICTIONARY = "custom_parser_dictionary"
+
+        private const val KEY_PACKAGE_FILTER_LEGACY = "package_filter"
+    }
+}

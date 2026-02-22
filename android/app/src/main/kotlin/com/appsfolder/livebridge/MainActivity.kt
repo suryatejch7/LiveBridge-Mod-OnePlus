@@ -1,0 +1,566 @@
+package com.appsfolder.livebridge
+
+import android.Manifest
+import android.app.NotificationManager
+import android.content.ActivityNotFoundException
+import android.content.ComponentName
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager.MATCH_ALL
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.Drawable
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.provider.Settings
+import android.service.notification.NotificationListenerService
+import android.util.Log
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import com.appsfolder.livebridge.liveupdate.AppPresentationOverridesCodec
+import com.appsfolder.livebridge.liveupdate.AppPresentationOverridesLoader
+import com.appsfolder.livebridge.liveupdate.ConverterPrefs
+import com.appsfolder.livebridge.liveupdate.DeviceBlocker
+import com.appsfolder.livebridge.liveupdate.DeviceProps
+import com.appsfolder.livebridge.liveupdate.LiveParserDictionary
+import com.appsfolder.livebridge.liveupdate.LiveParserDictionaryLoader
+import com.appsfolder.livebridge.liveupdate.LiveUpdateNotifier
+import com.appsfolder.livebridge.liveupdate.LiveUpdateNotificationListenerService
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodCall
+import io.flutter.plugin.common.MethodChannel
+import java.io.ByteArrayOutputStream
+import java.util.Locale
+import java.util.concurrent.Executors
+
+class MainActivity : FlutterActivity() {
+    private var notificationPermissionResult: MethodChannel.Result? = null
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            METHOD_CHANNEL
+        ).setMethodCallHandler { call, result ->
+            handleMethodCall(call, result)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_POST_NOTIFICATIONS) {
+            val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+            notificationPermissionResult?.success(granted)
+            notificationPermissionResult = null
+        }
+    }
+
+    private fun handleMethodCall(call: MethodCall, res: MethodChannel.Result) {
+        val prefs = ConverterPrefs(applicationContext)
+
+        when (call.method) {
+            "isDeviceBlocked" -> res.success(
+                DeviceBlocker.isBlockedDevice() && !prefs.getPixelJokeBypassEnabled()
+            )
+
+            "getPixelJokeBypassEnabled" -> res.success(prefs.getPixelJokeBypassEnabled())
+            "setPixelJokeBypassEnabled" -> {
+                prefs.setPixelJokeBypassEnabled(call.argument<Boolean>("value") ?: false)
+                res.success(true)
+            }
+
+            "isNotificationListenerEnabled" -> res.success(isNotificationListenerEnabled())
+            "requestNotificationListenerRebind" -> res.success(requestNotificationListenerRebind())
+            "openNotificationListenerSettings" -> res.success(openNotificationListenerSettings())
+            "isNotificationPermissionGranted" -> res.success(isNotificationPermissionGranted())
+            "requestNotificationPermission" -> requestNotificationPermission(res)
+            "canPostPromotedNotifications" -> res.success(canPostPromotedNotifications())
+            "openPromotedNotificationSettings" -> res.success(openPromotedNotificationSettings())
+            "openAppNotificationSettings" -> res.success(openAppNotificationSettings())
+            "getInstalledApps" -> loadInstalledAppsAsync(res)
+            "getDeviceInfo" -> res.success(getDeviceInfo())
+            "getAppListAccessGranted" -> res.success(prefs.getAppListAccessGranted())
+            "setAppListAccessGranted" -> {
+                prefs.setAppListAccessGranted(call.argument<Boolean>("value") ?: false)
+                res.success(true)
+            }
+
+            "getBackgroundWarningDismissed" -> res.success(prefs.getBackgroundWarningDismissed())
+            "setBackgroundWarningDismissed" -> {
+                prefs.setBackgroundWarningDismissed(call.argument<Boolean>("value") ?: false)
+                res.success(true)
+            }
+
+            "getSamsungWarningDismissed" -> res.success(prefs.getSamsungWarningDismissed())
+            "setSamsungWarningDismissed" -> {
+                prefs.setSamsungWarningDismissed(call.argument<Boolean>("value") ?: false)
+                res.success(true)
+            }
+
+            "hasExpandedSectionsState" -> res.success(prefs.hasExpandedSectionsState())
+            "getExpandedSections" -> res.success(prefs.getExpandedSectionsRaw())
+            "setExpandedSections" -> {
+                prefs.setExpandedSectionsRaw(call.argument<String>("value"))
+                res.success(true)
+            }
+
+            "getAppPresentationOverrides" -> res.success(prefs.getAppPresentationOverridesRaw())
+            "setAppPresentationOverrides" -> {
+                val raw = call.argument<String>("value")
+                val normalized = AppPresentationOverridesCodec.normalizeForStorage(raw)
+                if (normalized == null) {
+                    res.error("invalid_app_overrides", "App overrides JSON is invalid", null)
+                    return
+                }
+                prefs.setAppPresentationOverridesRaw(normalized)
+                AppPresentationOverridesLoader.invalidate()
+                res.success(true)
+            }
+
+            "saveAppPresentationOverridesToDownloads" -> {
+                val raw = AppPresentationOverridesCodec.normalizeForDownload(
+                    prefs.getAppPresentationOverridesRaw()
+                ) ?: run {
+                    res.error("invalid_app_overrides", "App overrides JSON is invalid", null)
+                    return
+                }
+                val savedUri = saveJsonToDownloads(
+                    raw = raw,
+                    filePrefix = "livebridge_app_overrides"
+                )
+                if (savedUri == null) {
+                    res.error("save_failed", "Unable to save app overrides to Downloads", null)
+                } else {
+                    res.success(savedUri)
+                }
+            }
+
+            "hasCustomParserDictionary" -> res.success(prefs.hasCustomParserDictionary())
+            "getParserDictionaryJson" -> res.success(
+                prefs.getCustomParserDictionaryRaw() ?: loadBundledParserDictionaryJson().orEmpty()
+            )
+
+            "saveParserDictionaryToDownloads" -> {
+                val raw = prefs.getCustomParserDictionaryRaw() ?: loadBundledParserDictionaryJson().orEmpty()
+                if (raw.isBlank()) {
+                    res.error("dictionary_empty", "Dictionary payload is empty", null)
+                    return
+                }
+                val savedUri = saveParserDictionaryToDownloads(raw)
+                if (savedUri == null) {
+                    res.error("save_failed", "Unable to save dictionary to Downloads", null)
+                } else {
+                    res.success(savedUri)
+                }
+            }
+
+            "setCustomParserDictionary" -> {
+                val raw = call.argument<String>("value")?.trim().orEmpty()
+                if (raw.isBlank()) {
+                    res.error("invalid_dictionary", "Dictionary payload is empty", null)
+                    return
+                }
+                if (LiveParserDictionary.fromJson(raw) == null) {
+                    res.error("invalid_dictionary", "Dictionary JSON is invalid", null)
+                    return
+                }
+                prefs.setCustomParserDictionaryRaw(raw)
+                LiveParserDictionaryLoader.invalidate()
+                res.success(true)
+            }
+
+            "clearCustomParserDictionary" -> {
+                prefs.clearCustomParserDictionary()
+                LiveParserDictionaryLoader.invalidate()
+                res.success(true)
+            }
+
+            "getPackageRules" -> res.success(prefs.getPackageRulesRaw())
+            "setPackageRules" -> {
+                prefs.setPackageRulesRaw(call.argument<String>("value"))
+                res.success(true)
+            }
+
+            "getPackageMode" -> res.success(prefs.getPackageMode())
+            "setPackageMode" -> {
+                prefs.setPackageMode(call.argument<String>("value"))
+                res.success(true)
+            }
+
+            "getOnlyWithProgress" -> res.success(prefs.getOnlyWithProgress())
+            "setOnlyWithProgress" -> {
+                prefs.setOnlyWithProgress(call.argument<Boolean>("value") ?: true)
+                res.success(true)
+            }
+
+            "getConverterEnabled" -> res.success(prefs.getConverterEnabled())
+            "setConverterEnabled" -> {
+                val value = call.argument<Boolean>("value") ?: true
+                prefs.setConverterEnabled(value)
+                if (!value) {
+                    LiveUpdateNotifier.clearRuntimeState()
+                    NotificationManagerCompat.from(applicationContext).cancelAll()
+                } else {
+                    requestNotificationListenerRebind()
+                }
+                res.success(true)
+            }
+
+            "getSmartStatusDetectionEnabled" -> res.success(prefs.getSmartStatusDetectionEnabled())
+            "setSmartStatusDetectionEnabled" -> {
+                prefs.setSmartStatusDetectionEnabled(call.argument<Boolean>("value") ?: true)
+                res.success(true)
+            }
+
+            "getOtpDetectionEnabled" -> res.success(prefs.getOtpDetectionEnabled())
+            "setOtpDetectionEnabled" -> {
+                prefs.setOtpDetectionEnabled(call.argument<Boolean>("value") ?: true)
+                res.success(true)
+            }
+
+            "getOtpAutoCopyEnabled" -> res.success(prefs.getOtpAutoCopyEnabled())
+            "setOtpAutoCopyEnabled" -> {
+                prefs.setOtpAutoCopyEnabled(call.argument<Boolean>("value") ?: false)
+                res.success(true)
+            }
+
+            "getOtpPackageRules" -> res.success(prefs.getOtpPackageRulesRaw())
+            "setOtpPackageRules" -> {
+                prefs.setOtpPackageRulesRaw(call.argument<String>("value"))
+                res.success(true)
+            }
+
+            "getOtpPackageMode" -> res.success(prefs.getOtpPackageMode())
+            "setOtpPackageMode" -> {
+                prefs.setOtpPackageMode(call.argument<String>("value"))
+                res.success(true)
+            }
+
+            else -> res.notImplemented()
+        }
+    }
+
+    private fun loadBundledParserDictionaryJson(): String? {
+        return try {
+            assets.open("liveupdate_dictionary.json")
+                .bufferedReader(Charsets.UTF_8)
+                .use { it.readText() }
+        } catch (error: Throwable) {
+            Log.e(TAG, "Failed to read bundled parser dictionary asset", error)
+            null
+        }
+    }
+
+    private fun saveParserDictionaryToDownloads(raw: String): String? {
+        return saveJsonToDownloads(raw = raw, filePrefix = "livebridge_dictionary")
+    }
+
+    private fun saveJsonToDownloads(raw: String, filePrefix: String): String? {
+        val resolver = contentResolver
+        val fileName = "${filePrefix}_${System.currentTimeMillis()}.json"
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+            put(MediaStore.Downloads.MIME_TYPE, "application/json")
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
+
+        return try {
+            resolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8).use { writer ->
+                if (writer == null) {
+                    throw IllegalStateException("Unable to open output stream for $uri")
+                }
+                writer.write(raw)
+                writer.flush()
+            }
+
+            val publishValues = ContentValues().apply {
+                put(MediaStore.Downloads.IS_PENDING, 0)
+            }
+            resolver.update(uri, publishValues, null, null)
+            uri.toString()
+        } catch (error: Throwable) {
+            Log.e(TAG, "Failed to save JSON to Downloads for $filePrefix", error)
+            runCatching { resolver.delete(uri, null, null) }
+            null
+        }
+    }
+
+    private fun isNotificationListenerEnabled(): Boolean {
+        val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+            ?: return false
+        val service = ComponentName(this, LiveUpdateNotificationListenerService::class.java)
+
+        return enabled.split(":")
+            .mapNotNull(ComponentName::unflattenFromString)
+            .any { it == service }
+    }
+
+    private fun requestNotificationListenerRebind(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            return false
+        }
+        if (!isNotificationListenerEnabled()) {
+            return false
+        }
+
+        return try {
+            NotificationListenerService.requestRebind(
+                ComponentName(this, LiveUpdateNotificationListenerService::class.java)
+            )
+            true
+        } catch (error: Throwable) {
+            Log.e(TAG, "Failed to request listener rebind", error)
+            false
+        }
+    }
+
+    private fun isNotificationPermissionGranted(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return true
+        }
+
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestNotificationPermission(res: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || isNotificationPermissionGranted()) {
+            res.success(true)
+            return
+        }
+
+        if (notificationPermissionResult != null) {
+            res.error(
+                "permission_in_progress",
+                "Notification permission request is already in progress",
+                null
+            )
+            return
+        }
+
+        notificationPermissionResult = res
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            REQUEST_POST_NOTIFICATIONS
+        )
+    }
+
+    private fun canPostPromotedNotifications(): Boolean {
+        if (Build.VERSION.SDK_INT < 36) {
+            return false
+        }
+
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        return try {
+            val method = notificationManager.javaClass.getMethod("canPostPromotedNotifications")
+            method.invoke(notificationManager) as? Boolean ?: false
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun openNotificationListenerSettings(): Boolean {
+        if (launchSettingsIntent(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))) {
+            return true
+        }
+
+        return launchSettingsIntent(appDetailsIntent())
+    }
+
+    private fun openAppNotificationSettings(): Boolean {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        }
+
+        if (launchSettingsIntent(intent)) {
+            return true
+        }
+
+        return launchSettingsIntent(appDetailsIntent())
+    }
+
+    private fun openPromotedNotificationSettings(): Boolean {
+        val intent = Intent("android.settings.APP_NOTIFICATION_PROMOTION_SETTINGS").apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        }
+
+        if (launchSettingsIntent(intent)) {
+            return true
+        }
+
+        return openAppNotificationSettings()
+    }
+
+    private fun appDetailsIntent(): Intent {
+        return Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", packageName, null)
+        }
+    }
+
+    private fun loadInstalledAppsAsync(res: MethodChannel.Result) {
+        appsLoaderExecutor.execute {
+            try {
+                val apps = getInstalledApps()
+                runOnUiThread {
+                    res.success(apps)
+                }
+            } catch (error: Throwable) {
+                Log.e(TAG, "Failed to load installed apps", error)
+                runOnUiThread {
+                    res.error(
+                        "installed_apps_failed",
+                        "Failed to load installed apps",
+                        error.message
+                    )
+                }
+            }
+        }
+    }
+
+    private fun getInstalledApps(): List<Map<String, Any>> {
+        val now = System.currentTimeMillis()
+        synchronized(installedAppsCacheLock) {
+            val cached = installedAppsCache
+            if (cached != null && now - installedAppsCacheAtMs <= INSTALLED_APPS_CACHE_TTL_MS) {
+                return cached
+            }
+        }
+
+        val pm = packageManager
+        val launcherIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+        val resolved = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pm.queryIntentActivities(
+                launcherIntent,
+                PackageManager.ResolveInfoFlags.of(MATCH_ALL.toLong())
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            pm.queryIntentActivities(launcherIntent, MATCH_ALL)
+        }
+
+        val entries = resolved
+            .asSequence()
+            .mapNotNull { resolveInfo ->
+                val activityInfo = resolveInfo.activityInfo ?: return@mapNotNull null
+                val appPackage = activityInfo.packageName
+                if (appPackage == packageName) {
+                    return@mapNotNull null
+                }
+                val resolvedLabel = resolveInfo.loadLabel(pm)?.toString()?.trim().orEmpty()
+                val label = if (resolvedLabel.isNotEmpty()) resolvedLabel else appPackage
+                val iconBytes = resolveCachedIconBytes(appPackage) ?: drawableToPngBytes(resolveInfo.loadIcon(pm))
+                val entry = mutableMapOf<String, Any>(
+                    "packageName" to appPackage,
+                    "label" to label
+                )
+                if (iconBytes != null) {
+                    entry["icon"] = iconBytes
+                    cacheIconBytes(appPackage, iconBytes)
+                }
+                entry
+            }
+            .distinctBy { it["packageName"] ?: "" }
+            .sortedBy { (it["label"] as? String)?.lowercase(Locale.getDefault()) ?: "" }
+            .toList()
+
+        synchronized(installedAppsCacheLock) {
+            installedAppsCache = entries
+            installedAppsCacheAtMs = now
+        }
+        return entries
+    }
+
+    private fun resolveCachedIconBytes(packageName: String): ByteArray? {
+        synchronized(installedAppsCacheLock) {
+            return appIconBytesCache[packageName]
+        }
+    }
+
+    private fun cacheIconBytes(packageName: String, bytes: ByteArray) {
+        synchronized(installedAppsCacheLock) {
+            if (appIconBytesCache.size >= MAX_ICON_CACHE_SIZE && !appIconBytesCache.containsKey(packageName)) {
+                appIconBytesCache.clear()
+            }
+            appIconBytesCache[packageName] = bytes
+        }
+    }
+
+    private fun drawableToPngBytes(drawable: Drawable?): ByteArray? {
+        drawable ?: return null
+        return try {
+            val sizePx = 96
+            val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            drawable.setBounds(0, 0, sizePx, sizePx)
+            drawable.draw(canvas)
+
+            val outputStream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+            outputStream.toByteArray()
+        } catch (error: Throwable) {
+            Log.w(TAG, "Failed to extract app icon for package picker", error)
+            null
+        }
+    }
+
+    private fun getDeviceInfo(): Map<String, String> {
+        val mn = DeviceProps.marketName()
+        return mapOf(
+            "manufacturer" to (Build.MANUFACTURER ?: ""),
+            "brand" to (Build.BRAND ?: ""),
+            "model" to mn,
+            "marketName" to mn,
+            "rawModel" to (Build.MODEL ?: "")
+        )
+    }
+
+    private fun launchSettingsIntent(intent: Intent): Boolean {
+        return try {
+            if (intent.resolveActivity(packageManager) == null) {
+                false
+            } else {
+                startActivity(intent)
+                true
+            }
+        } catch (_: ActivityNotFoundException) {
+            false
+        } catch (error: SecurityException) {
+            Log.e(TAG, "Unable to open settings with intent: ${intent.action}", error)
+            false
+        }
+    }
+
+    companion object {
+        private const val METHOD_CHANNEL = "livebridge/platform"
+        private const val REQUEST_POST_NOTIFICATIONS = 2406
+        private const val TAG = "MainActivity"
+        private const val INSTALLED_APPS_CACHE_TTL_MS = 10 * 60 * 1000L
+        private const val MAX_ICON_CACHE_SIZE = 512
+
+        private val installedAppsCacheLock = Any()
+        private var installedAppsCache: List<Map<String, Any>>? = null
+        private var installedAppsCacheAtMs: Long = 0L
+        private val appIconBytesCache: MutableMap<String, ByteArray> = mutableMapOf()
+        private val appsLoaderExecutor = Executors.newSingleThreadExecutor()
+    }
+}

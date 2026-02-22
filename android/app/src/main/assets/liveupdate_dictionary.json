@@ -1,0 +1,144 @@
+{
+  "smart_rules": [
+    {
+      "id": "food",
+      "max_stage": 4,
+      "package_hints": [
+        "kfc",
+        "ubereats",
+        "doordash",
+        "grubhub",
+        "delivery",
+        "еда",
+        "food"
+      ],
+      "text_triggers": [
+        "заказ",
+        "order",
+        "доставка",
+        "delivery",
+        "курьер",
+        "courier",
+        "еда",
+        "food"
+      ],
+      "signals": [
+        {
+          "stage": 4,
+          "pattern": "(доставлен|получен|delivered|completed|приятного аппетита|enjoy)"
+        },
+        {
+          "stage": 3,
+          "pattern": "(курьер[^\\n]*в пути|out for delivery|on the way|едет к вам)"
+        },
+        {
+          "stage": 2,
+          "pattern": "(собираем|упаковываем|почти готов|packed|almost ready|ready for pickup)"
+        },
+        {
+          "stage": 1,
+          "pattern": "(готовится|готовим|preparing|in kitchen|is being prepared|is being cooked|being cooked|cooking|cooked for you)"
+        },
+        {
+          "stage": 0,
+          "pattern": "(заказ[^\\n]*(принят|создан)|order[^\\n]*(received|accepted|confirmed))"
+        }
+      ]
+    },
+    {
+      "id": "taxi",
+      "max_stage": 4,
+      "package_hints": ["taxi", "uber", "lyft", "bolt", "yango", "yandex"],
+      "text_triggers": [
+        "такси",
+        "taxi",
+        "ride",
+        "поездка",
+        "водитель",
+        "driver"
+      ],
+      "signals": [
+        {
+          "stage": 4,
+          "pattern": "(поездка завершена|trip completed|arrived at destination|you'?ve arrived)"
+        },
+        {
+          "stage": 3,
+          "pattern": "(поездка началась|trip started|ride started|enjoy your ride)"
+        },
+        {
+          "stage": 2,
+          "pattern": "(едет к вам|подъезжает|driver[^\\n]*arriving|arriving in|on the way)"
+        },
+        {
+          "stage": 1,
+          "pattern": "(водитель найден|driver found|driver assigned|matched with driver)"
+        },
+        {
+          "stage": 0,
+          "pattern": "(поиск[^\\n]*водител|ищем[^\\n]*водител|searching for (a )?driver|finding driver)"
+        }
+      ]
+    }
+  ],
+  "otp_strong_triggers": [
+    "otp",
+    "one-time password",
+    "one time password",
+    "verification code",
+    "security code",
+    "login code",
+    "passcode",
+    "2fa",
+    "auth code",
+    "sms code",
+    "код подтверждения",
+    "код входа",
+    "код для входа",
+    "код аккаунта",
+    "одноразовый",
+    "код из смс"
+  ],
+  "otp_loose_trigger_pattern": "(?:(?:\\bcode\\b|\\bкод\\b)\\s*[:#-]?\\s*\\d{4,8})",
+  "money_context_pattern": "(₽|руб\\.?|rub|usd|eur|kzt|тенге|р\\.|\\$|€|price|total|amount|sum|сумм|цена|стоимост|итого)",
+  "otp_code_patterns": [
+    "(?<!\\d)(\\d{4,8})(?!\\d)",
+    "(?<!\\d)(\\d(?:[\\s-]?\\d){3,7})(?!\\d)"
+  ],
+  "order_context_hints": ["заказ", "order", "delivery", "достав"],
+  "entity_token_patterns": [
+    "(?:заказ|order|trip|ride|поездк[аы])\\s*(?:#|№)?\\s*([a-z0-9-]{2,16})",
+    "(?:#|№)\\s*([a-z0-9-]{2,16})",
+    "\\b(\\d{4,10})\\b"
+  ],
+  "status_labels": {
+    "food": {
+      "ru": {
+        "0": "Оплачен",
+        "1": "Готовится",
+        "2": "Готов"
+      },
+      "en": {
+        "0": "Paid",
+        "1": "Cooking",
+        "2": "Ready"
+      }
+    },
+    "taxi": {
+      "ru": {
+        "0": "Поиск",
+        "1": "Водитель",
+        "2": "Подъезжает",
+        "3": "В пути",
+        "4": "Завершено"
+      },
+      "en": {
+        "0": "Searching",
+        "1": "Driver",
+        "2": "Arriving",
+        "3": "On trip",
+        "4": "Done"
+      }
+    }
+  }
+}

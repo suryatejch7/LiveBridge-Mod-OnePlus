@@ -1,0 +1,239 @@
+import 'package:flutter/material.dart';
+
+class AppStrings {
+  AppStrings({required this.isRu});
+  final bool isRu;
+
+  static AppStrings of(BuildContext context) {
+    final bool isRu = Localizations.localeOf(
+      context,
+    ).languageCode.toLowerCase().startsWith('ru');
+    return AppStrings(isRu: isRu);
+  }
+
+  String get refresh => isRu ? 'Обновить' : 'Refresh';
+  String get saved => isRu ? 'Настройки сохранены.' : 'Settings saved.';
+  String get saveFailed =>
+      isRu ? 'Не удалось сохранить настройки.' : 'Unable to save settings.';
+  String get permissionGranted => isRu
+      ? 'Разрешение на уведомления выдано.'
+      : 'Notification permission granted.';
+  String get permissionDenied => isRu
+      ? 'Разрешение на уведомления не выдано.'
+      : 'Notification permission was not granted.';
+  String get listenerOpened => isRu
+      ? 'Открыты настройки Notification Listener.'
+      : 'Opened Notification Listener settings.';
+  String get listenerUnavailable => isRu
+      ? 'Не удалось открыть настройки Listener.'
+      : 'Unable to open Listener settings on this device.';
+  String get notificationsOpened => isRu
+      ? 'Открыты настройки уведомлений приложения.'
+      : 'Opened app notification settings.';
+  String get notificationsUnavailable => isRu
+      ? 'Не удалось открыть настройки уведомлений.'
+      : 'Unable to open app notification settings.';
+  String get liveUpdatesOpened => isRu
+      ? 'Открыты настройки Live Updates.'
+      : 'Opened Live Updates settings.';
+  String get liveUpdatesUnavailable => isRu
+      ? 'Не удалось открыть настройки Live Updates.'
+      : 'Unable to open Live Updates settings on this device.';
+  String get githubOpenFailed => isRu
+      ? 'Не удалось открыть ссылку GitHub.'
+      : 'Unable to open GitHub link.';
+  String get dictionaryEmpty => isRu
+      ? 'Словарь пустой или поврежден.'
+      : 'Dictionary is empty or invalid.';
+  String get dictionaryDownloadFailed =>
+      isRu ? 'Не удалось выгрузить словарь.' : 'Failed to export dictionary.';
+  String get dictionarySaved =>
+      isRu ? 'Словарь сохранен в Загрузки.' : 'Dictionary saved to Downloads.';
+  String get dictionaryUploadDone => isRu
+      ? 'Пользовательский словарь загружен.'
+      : 'Custom dictionary uploaded.';
+  String get dictionaryInvalid =>
+      isRu ? 'Невалидный JSON словаря.' : 'Invalid dictionary JSON.';
+  String get dictionaryUploadFailed =>
+      isRu ? 'Не удалось загрузить словарь.' : 'Failed to upload dictionary.';
+  String get dictionaryResetDone => isRu
+      ? 'Возвращен словарь из приложения.'
+      : 'Bundled dictionary restored.';
+  String get dictionaryResetFailed =>
+      isRu ? 'Не удалось сбросить словарь.' : 'Failed to reset dictionary.';
+
+  String get heroTitle => 'LiveBridge';
+  String get masterToggleLockedHint => isRu
+      ? 'Сначала выдайте доступ к уведомлениям и разрешение на уведомления.'
+      : 'Grant notification listener access and notifications permission first.';
+  String get githubUrl => 'github.com/appsfolder/livebridge';
+  String get hideWarningBanner => isRu ? 'Скрыть' : 'Hide';
+  String get backgroundWarningTitle =>
+      isRu ? 'Важно для фоновой работы' : 'Background mode warning';
+  String backgroundWarningBody(String deviceLabel) => isRu
+      ? 'Для $deviceLabel нужно вручную разрешить автозапуск и работу без ограничений в фоне, иначе Live Updates могут не появляться или зависать.'
+      : 'On $deviceLabel, allow autostart and unrestricted background activity, otherwise Live Updates may stop appearing or freeze.';
+  String get samsungWarningTitle =>
+      isRu ? 'Важно для Samsung' : 'Important for Samsung';
+  String get samsungWarningBody => isRu
+      ? 'Для Samsung не нужно включать Live Updates в приложении. Но в параметрах разработчика обязательно включите "Отображение живых уведомлений для всех приложений".'
+      : 'On Samsung, enabling in-app Live Updates is not required. But in Developer options, enable "Live notifications for all apps".';
+
+  String get accessTitle => isRu ? 'Разрешения' : 'Permissions';
+  String get accessSubtitle => isRu
+      ? 'Без этих трёх разрешений конвертация будет работать нестабильно.'
+      : 'Conversion reliability depends on these three permissions.';
+  String get listenerAccess =>
+      isRu ? 'Доступ к уведомлениям' : 'Notification Listener access';
+  String get postNotifications =>
+      isRu ? 'Отправка уведомлений' : 'Post notifications permission';
+  String get liveUpdatesAccess =>
+      isRu ? 'Продвижение Live Updates' : 'Live Updates promotion';
+  String get open => isRu ? 'Открыть' : 'Open';
+  String get request => isRu ? 'Запросить' : 'Request';
+  String get grant => isRu ? 'Выдать' : 'Grant';
+  String get manage => isRu ? 'Управлять' : 'Manage';
+  String get settingsTitle => 'Settings';
+  String get appPresentationSettings =>
+      isRu ? 'Поведение приложений' : 'Per-app behavior';
+  String get appPresentationScreenTitle =>
+      isRu ? 'Поведение приложений' : 'Per-app behavior';
+  String get appPresentationLoadFailed => isRu
+      ? 'Не удалось загрузить настройки приложений.'
+      : 'Unable to load per-app settings.';
+  String get appPresentationSaveFailed => isRu
+      ? 'Не удалось сохранить настройки приложений.'
+      : 'Unable to save per-app settings.';
+  String get appPresentationDownloadFailed => isRu
+      ? 'Не удалось сохранить JSON настроек.'
+      : 'Failed to save settings JSON.';
+  String get appPresentationSaved =>
+      isRu ? 'Настройки сохранены в Загрузки.' : 'Settings saved to Downloads.';
+  String get appPresentationUploadDone =>
+      isRu ? 'Настройки приложений загружены.' : 'Per-app settings imported.';
+  String get appPresentationUploadFailed => isRu
+      ? 'Не удалось загрузить JSON настроек.'
+      : 'Failed to import settings JSON.';
+  String get appPresentationInvalidJson => isRu
+      ? 'Невалидный JSON настроек приложений.'
+      : 'Invalid per-app settings JSON.';
+  String get appPresentationDefaultSummary =>
+      isRu ? 'Стандартное поведение' : 'Default behavior';
+  String get appPresentationTextSourceLabel =>
+      isRu ? 'Источник текста для острова' : 'Island text source';
+  String get appPresentationIconSourceLabel =>
+      isRu ? 'Источник иконки' : 'Icon source';
+  String get appPresentationTextTitle =>
+      isRu ? 'Title уведомления' : 'Notification title';
+  String get appPresentationTextNotification =>
+      isRu ? 'Текст уведомления' : 'Notification text';
+  String get appPresentationIconNotification =>
+      isRu ? 'Иконка уведомления' : 'Notification icon';
+  String get appPresentationIconApp =>
+      isRu ? 'Иконка приложения' : 'Application icon';
+  String get downloadSettings =>
+      isRu ? 'Скачать настройки' : 'Download settings';
+  String get uploadSettings => isRu ? 'Загрузить настройки' : 'Upload settings';
+  String get defaultLabel => isRu ? 'По умолчанию' : 'Default';
+  String get resetToDefault =>
+      isRu ? 'Сбросить к стандарту' : 'Reset to default';
+  String get save => isRu ? 'Сохранить' : 'Save';
+  String get downloadDictionary =>
+      isRu ? 'Скачать словарь' : 'Download dictionary';
+  String get uploadDictionary =>
+      isRu ? 'Загрузить словарь' : 'Upload dictionary';
+  String get resetDictionary => isRu ? 'Сбросить словарь' : 'Reset dictionary';
+  String get pickApps => isRu ? 'Выбрать приложения' : 'Pick applications';
+  String get pickerTitle =>
+      isRu ? 'Приложения для конвертации' : 'Choose apps for conversion';
+  String get otpPickerTitle =>
+      isRu ? 'Приложения для кодов' : 'Choose apps for code detection';
+  String get applySelection => isRu ? 'Применить выбор' : 'Apply selection';
+  String get searchAppHint =>
+      isRu ? 'Поиск по названию или пакету' : 'Search by app or package';
+  String get appsLoadFailed => isRu
+      ? 'Не удалось загрузить список приложений.'
+      : 'Unable to load installed apps list.';
+  String get appsAccessTitle =>
+      isRu ? 'Доступ к списку приложений' : 'App list access';
+  String get appsAccessMessage => isRu
+      ? 'Разрешить LiveBridge читать список установленных приложений для выбора правил?'
+      : 'Allow LiveBridge to read installed apps so you can pick apps for rules?';
+  String get appsAccessSaveFailed => isRu
+      ? 'Не удалось сохранить выбор доступа.'
+      : 'Unable to save access preference.';
+  String get cancel => isRu ? 'Отмена' : 'Cancel';
+  String get allow => isRu ? 'Разрешить' : 'Allow';
+  String selectedAppsCount(int value) =>
+      isRu ? 'Выбрано приложений: $value' : 'Selected apps: $value';
+  String get noAppsSelected =>
+      isRu ? 'Приложения не выбраны' : 'No applications selected';
+
+  String get rulesTitle => isRu ? 'Режим конвертации' : 'Conversion behavior';
+  String get rulesSubtitle => isRu
+      ? 'Настройте, что именно превращать в Live Updates.'
+      : 'Define what should be converted into Live Updates.';
+  String get modeLabel => isRu ? 'Режим работы' : 'Application mode';
+  String get modeAll => isRu ? 'Все приложения' : 'All applications';
+  String get modeInclude =>
+      isRu ? 'Только указанные' : 'Only listed applications';
+  String get modeExclude =>
+      isRu ? 'Исключить указанные' : 'Exclude listed applications';
+  String get pickAppsHint => isRu
+      ? 'Список используется только в режимах "Только указанные" или "Исключить".'
+      : 'Selected app list is used only for include/exclude modes.';
+  String get saveRules => isRu ? 'Сохранить' : 'Save';
+
+  String get smartDetectionTitle =>
+      isRu ? 'Умное распознавание' : 'Smart status detection';
+  String get smartCardTitle =>
+      isRu ? 'Умное преобразование' : 'Smart conversion';
+  String get smartCardSubtitle => isRu
+      ? 'Преобразование текстовых этапов в один Live-прогресс.'
+      : 'Converts text-only stage updates into one Live progress flow.';
+  String get smartDetectionSubtitle => isRu
+      ? 'Преобразует текстовые статусы в единый Live-прогресс.'
+      : 'Converts text-only order/taxi status notifications into a single Live.';
+  String get smartDetectionDisabledSubtitle => isRu
+      ? 'Отключено в режиме "Только прогресс".'
+      : 'Disabled while "Only progress" mode is enabled.';
+  String get conflictingModesHint => isRu
+      ? 'Чтобы работали текстовые статусы, отключите режим "Только прогресс".'
+      : 'Turn off "Only progress" mode to enable food/taxi text status recognition.';
+  String get onlyProgressTitle =>
+      isRu ? 'Только нативный прогресс' : 'Only native progress';
+  String get onlyProgressSubtitle => isRu
+      ? 'Если включено, конвертируются только уведомления с системным прогрессбаром.'
+      : 'When enabled, only notifications with a system progress bar are converted.';
+
+  String get blockedTitle => isRu
+      ? 'Пожалуйста, купите нормальный смартфон'
+      : 'Buy a proper phone first';
+  String get blockedSubtitle => isRu
+      ? 'LiveBridge плохо работает на устройствах с AOSP. Можете продолжить, но за последствия я не отвечаю.'
+      : 'LiveBridge is not designed for AOSP. You can continue, but i am not responsible for any bugs.';
+  String get blockedBypassAction =>
+      isRu ? 'Все равно родолжить' : 'Continue anyway';
+  String get blockedBypassSaveFailed =>
+      isRu ? 'Не удалось сохранить выбор.' : 'Unable to save your choice.';
+
+  String get otpTitle => isRu ? 'Коды подтверждения' : 'Verification codes';
+  String get otpSubtitle => isRu
+      ? 'Показывает код компактно в острове.'
+      : 'Shows the code in compact island.';
+  String get otpEnabledTitle =>
+      isRu ? 'Распознавать 2FA коды' : 'Detect verification codes';
+  String get otpEnabledSubtitle => isRu
+      ? 'В свернутом Live-острове показывается сам код.'
+      : 'Shows the numeric code in the compact island.';
+  String get otpAutoCopyTitle =>
+      isRu ? 'Автокопирование кода' : 'Auto-copy code';
+  String get otpAutoCopySubtitle => isRu
+      ? 'Код сразу копируется в буфер обмена.'
+      : 'Code is copied to clipboard automatically.';
+  String get otpAutoCopyDisabledSubtitle => isRu
+      ? 'Сначала включите распознавание кодов.'
+      : 'Enable code detection first.';
+  String get otpModeLabel => isRu ? 'Режим для кодов' : 'Code apps mode';
+  String get saveOtpRules => isRu ? 'Сохранить' : 'Save';
+}

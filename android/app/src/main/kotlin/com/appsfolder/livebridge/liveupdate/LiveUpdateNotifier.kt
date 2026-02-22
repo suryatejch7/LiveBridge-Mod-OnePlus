@@ -1,0 +1,1119 @@
+package com.appsfolder.livebridge.liveupdate
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Color
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.service.notification.StatusBarNotification
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.graphics.drawable.IconCompat
+import com.appsfolder.livebridge.R
+import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
+
+object LiveUpdateNotifier {
+    const val CHANNEL_ID = "livebridge_promoted_updates"
+
+    private const val CHANNEL_NAME = "LiveBridge Updates"
+    private const val TAG = "LiveUpdateNotifier"
+    private const val MAX_MIRRORED_ACTIONS = 3
+    private const val OTP_REPEAT_SUPPRESS_MS = 60_000L
+    private const val OTP_AUTOCOPY_COPIED_SHOW_DELAY_MS = 1_000L
+    private const val OTP_AUTOCOPY_COPIED_SHOW_DURATION_MS = 1_500L
+
+    private val OTP_CODE_LENGTH = 4..8
+    private val progressColor = Color.valueOf(15f / 255f, 118f / 255f, 110f / 255f, 1f).toArgb()
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    private val stateLock = Any()
+    private val sbnToAggregateKey = mutableMapOf<String, String>()
+    private val aggregateStates = mutableMapOf<String, AggregateState>()
+    private val sbnToOtpAggregateKey = mutableMapOf<String, String>()
+    private val sbnToOtpSourceKey = mutableMapOf<String, String>()
+    private val otpSourceStates = mutableMapOf<String, OtpSourceState>()
+    private val otpAggregateStates = mutableMapOf<String, OtpAggregateState>()
+    private val otpAnimationGenerations = mutableMapOf<String, Long>()
+
+    fun ensureChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return
+        }
+
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val current = manager.getNotificationChannel(CHANNEL_ID)
+
+        if (current == null) {
+            manager.createNotificationChannel(createChannel())
+            return
+        }
+
+        if (current.lockscreenVisibility != Notification.VISIBILITY_PUBLIC) {
+            current.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            manager.createNotificationChannel(current)
+        }
+    }
+
+    private fun createChannel(): NotificationChannel {
+        return NotificationChannel(
+            CHANNEL_ID,
+            CHANNEL_NAME,
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Converted promoted ongoing notifications"
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
+    }
+
+    fun clearRuntimeState() {
+        synchronized(stateLock) {
+            sbnToAggregateKey.clear()
+            aggregateStates.clear()
+            sbnToOtpAggregateKey.clear()
+            sbnToOtpSourceKey.clear()
+            otpSourceStates.clear()
+            otpAggregateStates.clear()
+            otpAnimationGenerations.clear()
+        }
+    }
+
+    fun maybeMirror(context: Context, prefs: ConverterPrefs, sbn: StatusBarNotification): Boolean {
+        ensureChannel(context)
+
+        val manager = NotificationManagerCompat.from(context)
+        if (!prefs.getConverterEnabled()) {
+            val staleAggregateIds = synchronized(stateLock) {
+                clearAggregateTrackingForSbnKeyLocked(sbn.key)
+            }
+            staleAggregateIds.forEach(manager::cancel)
+            manager.cancel(mirrorIdForKey(sbn.key))
+            return false
+        }
+
+        if (!passesBaseFilters(context.packageName, prefs, sbn)) {
+            val staleAggregateIds = synchronized(stateLock) {
+                clearAggregateTrackingForSbnKeyLocked(sbn.key)
+            }
+            staleAggregateIds.forEach(manager::cancel)
+            manager.cancel(mirrorIdForKey(sbn.key))
+            return false
+        }
+
+        return try {
+            val parserDictionary = LiveParserDictionaryLoader.get(context, prefs)
+            val appPresentationOverride =
+                AppPresentationOverridesLoader.get(prefs)[sbn.packageName.lowercase(Locale.ROOT)]
+                    ?: AppPresentationOverride()
+            val source = sbn.notification
+            val hasNativeProgress = hasProgress(source)
+
+            val otpMatch = if (!hasNativeProgress &&
+                prefs.getOtpDetectionEnabled() &&
+                prefs.isOtpPackageAllowed(sbn.packageName)
+            ) {
+                detectOtpCode(sbn.packageName, source, parserDictionary)
+            } else {
+                null
+            }
+
+            val smartMatch = if (!hasNativeProgress && otpMatch == null && prefs.getSmartStatusDetectionEnabled()) {
+                detectSmartStage(sbn.packageName, source, parserDictionary)
+            } else {
+                null
+            }
+
+            if (!hasNativeProgress && otpMatch == null && smartMatch == null && prefs.getOnlyWithProgress()) {
+                val staleAggregateIds = synchronized(stateLock) {
+                    clearAggregateTrackingForSbnKeyLocked(sbn.key)
+                }
+                staleAggregateIds.forEach(manager::cancel)
+                manager.cancel(mirrorIdForKey(sbn.key))
+                return false
+            }
+
+            when {
+                otpMatch != null -> {
+                    val routeState = synchronized(stateLock) {
+                        val staleAggregateIds = mutableListOf<Int>()
+                        staleAggregateIds.addAll(clearSmartTrackingForSbnKeyLocked(sbn.key))
+
+                        val sourceKey = otpSourceKeyForPackage(sbn.packageName)
+                        val sourceState = otpSourceStates[sourceKey]
+                        if (sourceState != null &&
+                            sourceState.sbnKey != sbn.key &&
+                            sbn.postTime < sourceState.postTimeMs
+                        ) {
+                            staleAggregateIds.addAll(clearOtpTrackingForSbnKeyLocked(sbn.key))
+                            OtpRouteState(
+                                staleAggregateIds = staleAggregateIds,
+                                shouldPublish = false,
+                                shouldAutoCopy = false,
+                                otpCode = otpMatch.code
+                            )
+                        } else {
+                            staleAggregateIds.addAll(clearOtpTrackingForSourceLocked(sourceKey, sbn.key))
+
+                            val existingOtpAggregateKey = sbnToOtpAggregateKey[sbn.key]
+                            if (existingOtpAggregateKey != null && existingOtpAggregateKey != otpMatch.aggregateKey) {
+                                staleAggregateIds.addAll(clearOtpTrackingForSbnKeyLocked(sbn.key))
+                            }
+
+                            val state = otpAggregateStates.getOrPut(otpMatch.aggregateKey) { OtpAggregateState() }
+                            state.activeSbnKeys.add(sbn.key)
+                            sbnToOtpAggregateKey[sbn.key] = otpMatch.aggregateKey
+                            sbnToOtpSourceKey[sbn.key] = sourceKey
+                            otpSourceStates[sourceKey] = OtpSourceState(
+                                sbnKey = sbn.key,
+                                aggregateKey = otpMatch.aggregateKey,
+                                postTimeMs = sbn.postTime
+                            )
+
+                            val now = System.currentTimeMillis()
+                            val shouldPublish =
+                                state.lastRenderedAtMs == 0L ||
+                                        now - state.lastRenderedAtMs >= OTP_REPEAT_SUPPRESS_MS
+                            if (shouldPublish) {
+                                state.lastRenderedAtMs = now
+                            }
+                            val shouldAutoCopy =
+                                prefs.getOtpAutoCopyEnabled() &&
+                                        shouldAutoCopyOtpLocked(state, otpMatch.code, now)
+                            OtpRouteState(
+                                staleAggregateIds = staleAggregateIds,
+                                shouldPublish = shouldPublish,
+                                shouldAutoCopy = shouldAutoCopy,
+                                otpCode = otpMatch.code
+                            )
+                        }
+                    }
+                    routeState.staleAggregateIds.forEach(manager::cancel)
+
+                    if (routeState.shouldPublish) {
+                        val notification = buildMirroredNotification(
+                            context = context,
+                            sbn = sbn,
+                            appPresentationOverride = appPresentationOverride,
+                            progressOverride = null,
+                            otpOverride = otpMatch,
+                            smartShortTextOverride = null,
+                            requestPromoted = true
+                        )
+                        notifyWithPromotionFallback(
+                            context = context,
+                            manager = manager,
+                            notificationId = mirrorIdForKey(otpMatch.aggregateKey),
+                            promotedNotification = notification,
+                            sbn = sbn,
+                            appPresentationOverride = appPresentationOverride,
+                            progressOverride = null,
+                            otpOverride = otpMatch,
+                            smartShortTextOverride = null
+                        )
+                    }
+                    if (routeState.shouldAutoCopy) {
+                        copyOtpToClipboard(context, routeState.otpCode)
+                        if (routeState.shouldPublish) {
+                            startOtpAutoCopyAnimation(
+                                context = context,
+                                manager = manager,
+                                sbn = sbn,
+                                appPresentationOverride = appPresentationOverride,
+                                otpMatch = otpMatch
+                            )
+                        }
+                    }
+                    true
+                }
+
+                smartMatch != null -> {
+                    val routeState = synchronized(stateLock) {
+                        val staleAggregateIds = mutableListOf<Int>()
+                        staleAggregateIds.addAll(clearOtpTrackingForSbnKeyLocked(sbn.key))
+
+                        val existingSmartAggregateKey = sbnToAggregateKey[sbn.key]
+                        if (existingSmartAggregateKey != null &&
+                            existingSmartAggregateKey != smartMatch.aggregateKey
+                        ) {
+                            staleAggregateIds.addAll(clearSmartTrackingForSbnKeyLocked(sbn.key))
+                        }
+
+                        val state = aggregateStates.getOrPut(smartMatch.aggregateKey) {
+                            AggregateState(smartMatch.stageValue, smartMatch.maxStage)
+                        }
+                        state.activeSbnKeys.add(sbn.key)
+                        state.maxStageSeen = maxOf(state.maxStageSeen, smartMatch.stageValue)
+                        sbnToAggregateKey[sbn.key] = smartMatch.aggregateKey
+
+                        SmartRouteState(
+                            staleAggregateIds = staleAggregateIds,
+                            stageValue = state.maxStageSeen,
+                            stageMax = state.maxStage,
+                            compactOrderCode = smartMatch.compactOrderCode
+                        )
+                    }
+                    routeState.staleAggregateIds.forEach(manager::cancel)
+                    val smartStatusText = smartShortStatusText(
+                        context = context,
+                        ruleId = smartRuleIdFromAggregateKey(smartMatch.aggregateKey),
+                        stageValue = routeState.stageValue,
+                        parserDictionary = parserDictionary
+                    ) ?: routeState.compactOrderCode
+
+                    val notification = buildMirroredNotification(
+                        context = context,
+                        sbn = sbn,
+                        appPresentationOverride = appPresentationOverride,
+                        progressOverride = ProgressOverride(routeState.stageValue, routeState.stageMax),
+                        otpOverride = null,
+                        smartShortTextOverride = smartStatusText,
+                        requestPromoted = true
+                    )
+                    notifyWithPromotionFallback(
+                        context = context,
+                        manager = manager,
+                        notificationId = mirrorIdForKey(smartMatch.aggregateKey),
+                        promotedNotification = notification,
+                        sbn = sbn,
+                        appPresentationOverride = appPresentationOverride,
+                        progressOverride = ProgressOverride(routeState.stageValue, routeState.stageMax),
+                        otpOverride = null,
+                        smartShortTextOverride = smartStatusText
+                    )
+                    true
+                }
+
+                else -> {
+                    val staleAggregateIds = synchronized(stateLock) {
+                        clearAggregateTrackingForSbnKeyLocked(sbn.key)
+                    }
+                    staleAggregateIds.forEach(manager::cancel)
+
+                    val notification = buildMirroredNotification(
+                        context = context,
+                        sbn = sbn,
+                        appPresentationOverride = appPresentationOverride,
+                        progressOverride = null,
+                        otpOverride = null,
+                        smartShortTextOverride = null,
+                        requestPromoted = true
+                    )
+                    notifyWithPromotionFallback(
+                        context = context,
+                        manager = manager,
+                        notificationId = mirrorIdForKey(sbn.key),
+                        promotedNotification = notification,
+                        sbn = sbn,
+                        appPresentationOverride = appPresentationOverride,
+                        progressOverride = null,
+                        otpOverride = null,
+                        smartShortTextOverride = null
+                    )
+                    true
+                }
+            }
+        } catch (error: Throwable) {
+            Log.e(TAG, "Failed to mirror notification: ${sbn.key}", error)
+            false
+        }
+    }
+
+    fun cancelMirrored(context: Context, sbn: StatusBarNotification) {
+        try {
+            val manager = NotificationManagerCompat.from(context)
+            val staleAggregateIds = synchronized(stateLock) {
+                clearAggregateTrackingForSbnKeyLocked(sbn.key)
+            }
+            staleAggregateIds.forEach(manager::cancel)
+            manager.cancel(mirrorIdForKey(sbn.key))
+        } catch (error: Throwable) {
+            Log.e(TAG, "Failed to cancel mirrored notification: ${sbn.key}", error)
+        }
+    }
+
+    private fun passesBaseFilters(
+        appPackageName: String,
+        prefs: ConverterPrefs,
+        sbn: StatusBarNotification
+    ): Boolean {
+        if (sbn.packageName == appPackageName) {
+            return false
+        }
+
+        val source = sbn.notification
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && source.channelId == CHANNEL_ID) {
+            return false
+        }
+
+        if (Build.VERSION.SDK_INT >= 36 && source.flags and 0x40000 != 0) {
+            return false
+        }
+
+        if (source.flags and Notification.FLAG_GROUP_SUMMARY != 0) {
+            return false
+        }
+
+        return prefs.isPackageAllowed(sbn.packageName)
+    }
+
+    private fun buildMirroredNotification(
+        context: Context,
+        sbn: StatusBarNotification,
+        appPresentationOverride: AppPresentationOverride,
+        progressOverride: ProgressOverride?,
+        otpOverride: OtpMatch?,
+        smartShortTextOverride: String?,
+        requestPromoted: Boolean,
+        otpShortTextOverride: String? = null
+    ): Notification {
+        val source = sbn.notification
+        val sourceSmallIcon = resolveSourceSmallIcon(context, sbn)
+        val appSmallIcon = resolveAppSmallIcon(context, sbn.packageName)
+
+        val appName = resolveAppName(context, sbn.packageName)
+        val title = extractTitle(source, appName)
+        val text = extractText(source)
+        val displayTitle = when (appPresentationOverride.compactTextSource) {
+            CompactTextSource.TEXT -> text.ifBlank { title }
+            CompactTextSource.TITLE -> title
+        }
+        val displayText = if (
+            appPresentationOverride.compactTextSource == CompactTextSource.TEXT &&
+            title.isNotBlank() &&
+            title != displayTitle
+        ) {
+            title
+        } else {
+            text
+        }
+
+        val progressMax = progressOverride?.max ?: source.extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
+        val progressValue = progressOverride?.value ?: source.extras.getInt(Notification.EXTRA_PROGRESS, 0)
+        val indeterminate = if (progressOverride != null) {
+            false
+        } else {
+            source.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false)
+        }
+        val hasProgress = progressOverride != null || hasProgress(source)
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setContentTitle(displayTitle)
+            .setContentText(displayText)
+            .setSubText(appName)
+            .setOnlyAlertOnce(true)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .setShowWhen(false)
+            .setColor(progressColor)
+            .setCategory(if (hasProgress) Notification.CATEGORY_PROGRESS else Notification.CATEGORY_STATUS)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+
+        val preferredSmallIcon = when (appPresentationOverride.iconSource) {
+            NotificationIconSource.NOTIFICATION -> sourceSmallIcon ?: appSmallIcon
+            NotificationIconSource.APP -> appSmallIcon ?: sourceSmallIcon
+        }
+        applySmallIcon(context, builder, preferredSmallIcon)
+
+        if (requestPromoted) {
+            builder.setRequestPromotedOngoing(true)
+        }
+
+        if (otpOverride != null) {
+            builder.addAction(buildCopyOtpAction(context, sbn, otpOverride.code))
+        }
+
+        source.contentIntent?.let(builder::setContentIntent)
+        source.deleteIntent?.let(builder::setDeleteIntent)
+
+        copySourceActions(
+            context = context,
+            source = source,
+            builder = builder,
+            maxActions = if (otpOverride != null) MAX_MIRRORED_ACTIONS - 1 else MAX_MIRRORED_ACTIONS
+        )
+
+        if (hasProgress) {
+            if (indeterminate || progressMax <= 0) {
+                builder.setProgress(0, 0, true)
+                builder.setStyle(
+                    NotificationCompat.ProgressStyle()
+                        .setProgressIndeterminate(true)
+                        .setStyledByProgress(true)
+                )
+            } else {
+                val safeMax = progressMax.coerceAtLeast(1)
+                val safeProgress = progressValue.coerceIn(0, safeMax)
+                val percent = ((safeProgress.toFloat() / safeMax.toFloat()) * 100f)
+                    .roundToInt()
+                    .coerceIn(0, 100)
+
+                builder.setProgress(safeMax, safeProgress, false)
+                builder.setStyle(
+                    NotificationCompat.ProgressStyle()
+                        .setProgress(percent)
+                        .setStyledByProgress(true)
+                )
+                builder.setShortCriticalText(smartShortTextOverride ?: "$percent%")
+            }
+        } else if (otpOverride != null) {
+            builder.setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            builder.setShortCriticalText(otpShortTextOverride ?: otpOverride.code)
+        } else {
+            builder.setStyle(NotificationCompat.BigTextStyle().bigText(text))
+        }
+        if (smartShortTextOverride != null) {
+            builder.setContentText(smartShortTextOverride)
+        }
+
+        return builder.build()
+    }
+
+    private fun notifyWithPromotionFallback(
+        context: Context,
+        manager: NotificationManagerCompat,
+        notificationId: Int,
+        promotedNotification: Notification,
+        sbn: StatusBarNotification,
+        appPresentationOverride: AppPresentationOverride,
+        progressOverride: ProgressOverride?,
+        otpOverride: OtpMatch?,
+        smartShortTextOverride: String?,
+        otpShortTextOverride: String? = null
+    ) {
+        try {
+            manager.notify(notificationId, promotedNotification)
+        } catch (error: Throwable) {
+            val fallback = buildMirroredNotification(
+                context = context,
+                sbn = sbn,
+                appPresentationOverride = appPresentationOverride,
+                progressOverride = progressOverride,
+                otpOverride = otpOverride,
+                smartShortTextOverride = smartShortTextOverride,
+                requestPromoted = false,
+                otpShortTextOverride = otpShortTextOverride
+            )
+            manager.notify(notificationId, fallback)
+        }
+    }
+
+    private fun detectSmartStage(
+        packageName: String,
+        source: Notification,
+        parserDictionary: LiveParserDictionary
+    ): SmartStageMatch? {
+        val title = extractTitle(source, packageName)
+        val text = extractText(source)
+        val combinedText = "$title $text".lowercase(Locale.ROOT)
+        val packageLower = packageName.lowercase(Locale.ROOT)
+
+        for (rule in parserDictionary.smartRules) {
+            if (!rule.isRelevant(packageLower, combinedText)) {
+                continue
+            }
+
+            val matchedSignal = rule.signals.firstOrNull { it.pattern.containsMatchIn(combinedText) } ?: continue
+            val entityToken = extractEntityToken(combinedText, parserDictionary)
+            val compactOrderCode = if (rule.id == "food") {
+                extractCompactOrderCode(entityToken)
+            } else {
+                null
+            }
+
+            return SmartStageMatch(
+                aggregateKey = "$packageLower:${rule.id}:$entityToken",
+                stageValue = matchedSignal.stage,
+                maxStage = rule.maxStage,
+                compactOrderCode = compactOrderCode
+            )
+        }
+
+        return null
+    }
+
+    private fun detectOtpCode(
+        packageName: String,
+        source: Notification,
+        parserDictionary: LiveParserDictionary
+    ): OtpMatch? {
+        val combinedText = collectNotificationText(source, packageName)
+        if (combinedText.isBlank()) {
+            return null
+        }
+
+        val combinedLower = combinedText.lowercase(Locale.ROOT)
+        val hasStrongTrigger = parserDictionary.otpStrongTriggers.any(combinedLower::contains)
+        val hasLooseTrigger = parserDictionary.otpLooseTriggerPattern.containsMatchIn(combinedLower)
+        if (!hasStrongTrigger && !hasLooseTrigger) {
+            return null
+        }
+        if (!hasStrongTrigger && looksLikeOrderContext(combinedLower, parserDictionary)) {
+            return null
+        }
+
+        for (pattern in parserDictionary.otpCodePatterns) {
+            for (match in pattern.findAll(combinedText)) {
+                val rawValue = match.groupValues.getOrNull(1)?.ifBlank { match.value } ?: match.value
+                val digits = rawValue.filter(Char::isDigit)
+                if (digits.length !in OTP_CODE_LENGTH) {
+                    continue
+                }
+                if (isLikelyMoneyCandidate(combinedLower, match.range.first, match.range.last + 1, parserDictionary)) {
+                    continue
+                }
+                if (looksLikeOrderContextAroundMatch(
+                        combinedLower,
+                        match.range.first,
+                        match.range.last + 1,
+                        parserDictionary
+                    ) &&
+                    !hasStrongTrigger
+                ) {
+                    continue
+                }
+                if (digits.length in OTP_CODE_LENGTH) {
+                    return OtpMatch(
+                        code = digits,
+                        aggregateKey = otpAggregateKeyForCode(packageName, digits)
+                    )
+                }
+            }
+        }
+
+        return null
+    }
+
+    private fun otpAggregateKeyForCode(packageName: String, code: String): String {
+        return "otp:${packageName.lowercase(Locale.ROOT)}:$code"
+    }
+
+    private fun otpSourceKeyForPackage(packageName: String): String {
+        return packageName.lowercase(Locale.ROOT)
+    }
+
+    private fun extractEntityToken(combinedText: String, parserDictionary: LiveParserDictionary): String {
+        for (pattern in parserDictionary.entityTokenPatterns) {
+            val match = pattern.find(combinedText) ?: continue
+            val token = match.groupValues.getOrNull(1)?.trim().orEmpty()
+            if (token.isNotEmpty()) {
+                return token
+            }
+        }
+
+        return "default"
+    }
+
+    private fun extractCompactOrderCode(token: String): String? {
+        if (token == "default" || token.isBlank()) {
+            return null
+        }
+        if (!token.any(Char::isDigit)) {
+            return null
+        }
+
+        val compact = token
+            .filter { it.isLetterOrDigit() || it == '-' }
+            .uppercase(Locale.ROOT)
+            .take(12)
+
+        return compact.ifBlank { null }
+    }
+
+    private fun smartRuleIdFromAggregateKey(aggregateKey: String): String {
+        val firstSeparator = aggregateKey.indexOf(':')
+        if (firstSeparator < 0) {
+            return ""
+        }
+        val secondSeparator = aggregateKey.indexOf(':', firstSeparator + 1)
+        if (secondSeparator < 0) {
+            return ""
+        }
+        return aggregateKey.substring(firstSeparator + 1, secondSeparator)
+    }
+
+    private fun smartShortStatusText(
+        context: Context,
+        ruleId: String,
+        stageValue: Int,
+        parserDictionary: LiveParserDictionary
+    ): String? {
+        return parserDictionary.resolveStatusText(
+            ruleId = ruleId,
+            stageValue = stageValue,
+            isRussianLocale = isRussianLocale(context)
+        )
+    }
+
+    private fun isRussianLocale(context: Context): Boolean {
+        val locale = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            context.resources.configuration.locales.get(0)
+        } else {
+            @Suppress("DEPRECATION")
+            context.resources.configuration.locale
+        }
+        val language = locale?.language?.lowercase(Locale.ROOT).orEmpty()
+        return language.startsWith("ru")
+    }
+
+    private fun isLikelyMoneyCandidate(
+        textLower: String,
+        start: Int,
+        endExclusive: Int,
+        parserDictionary: LiveParserDictionary
+    ): Boolean {
+        val windowStart = (start - 18).coerceAtLeast(0)
+        val windowEnd = (endExclusive + 18).coerceAtMost(textLower.length)
+        val context = textLower.substring(windowStart, windowEnd)
+        return parserDictionary.moneyContextPattern.containsMatchIn(context)
+    }
+
+    private fun looksLikeOrderContext(textLower: String, parserDictionary: LiveParserDictionary): Boolean {
+        return parserDictionary.orderContextHints.any(textLower::contains)
+    }
+
+    private fun looksLikeOrderContextAroundMatch(
+        textLower: String,
+        start: Int,
+        endExclusive: Int,
+        parserDictionary: LiveParserDictionary
+    ): Boolean {
+        val windowStart = (start - 24).coerceAtLeast(0)
+        val windowEnd = (endExclusive + 24).coerceAtMost(textLower.length)
+        val context = textLower.substring(windowStart, windowEnd)
+        return looksLikeOrderContext(context, parserDictionary)
+    }
+
+    private fun shouldAutoCopyOtpLocked(
+        state: OtpAggregateState,
+        code: String,
+        nowMs: Long
+    ): Boolean {
+        if (state.lastAutoCopiedCode != code) {
+            state.lastAutoCopiedCode = code
+            state.lastAutoCopiedAtMs = nowMs
+            return true
+        }
+
+        if (nowMs - state.lastAutoCopiedAtMs >= OTP_REPEAT_SUPPRESS_MS) {
+            state.lastAutoCopiedAtMs = nowMs
+            return true
+        }
+
+        return false
+    }
+
+    private fun copyOtpToClipboard(context: Context, code: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+        clipboard.setPrimaryClip(ClipData.newPlainText("OTP", code))
+    }
+
+    private fun startOtpAutoCopyAnimation(
+        context: Context,
+        manager: NotificationManagerCompat,
+        sbn: StatusBarNotification,
+        appPresentationOverride: AppPresentationOverride,
+        otpMatch: OtpMatch
+    ) {
+        val generation = synchronized(stateLock) {
+            val nextGeneration = (otpAnimationGenerations[otpMatch.aggregateKey] ?: 0L) + 1L
+            otpAnimationGenerations[otpMatch.aggregateKey] = nextGeneration
+            nextGeneration
+        }
+
+        val copiedLabel = if (isRussianLocale(context)) "Скопировано" else "Copied"
+
+        scheduleOtpAnimationStep(
+            context = context,
+            manager = manager,
+            sbn = sbn,
+            appPresentationOverride = appPresentationOverride,
+            otpMatch = otpMatch,
+            generation = generation,
+            delayMs = OTP_AUTOCOPY_COPIED_SHOW_DELAY_MS,
+            otpShortTextOverride = copiedLabel
+        )
+
+        scheduleOtpAnimationStep(
+            context = context,
+            manager = manager,
+            sbn = sbn,
+            appPresentationOverride = appPresentationOverride,
+            otpMatch = otpMatch,
+            generation = generation,
+            delayMs = OTP_AUTOCOPY_COPIED_SHOW_DELAY_MS + OTP_AUTOCOPY_COPIED_SHOW_DURATION_MS,
+            otpShortTextOverride = null
+        )
+    }
+
+    private fun scheduleOtpAnimationStep(
+        context: Context,
+        manager: NotificationManagerCompat,
+        sbn: StatusBarNotification,
+        appPresentationOverride: AppPresentationOverride,
+        otpMatch: OtpMatch,
+        generation: Long,
+        delayMs: Long,
+        otpShortTextOverride: String?
+    ) {
+        mainHandler.postDelayed({
+            if (!isOtpAnimationGenerationCurrent(otpMatch.aggregateKey, generation)) {
+                return@postDelayed
+            }
+            try {
+                val notification = buildMirroredNotification(
+                    context = context,
+                    sbn = sbn,
+                    appPresentationOverride = appPresentationOverride,
+                    progressOverride = null,
+                    otpOverride = otpMatch,
+                    smartShortTextOverride = null,
+                    requestPromoted = true,
+                    otpShortTextOverride = otpShortTextOverride
+                )
+                notifyWithPromotionFallback(
+                    context = context,
+                    manager = manager,
+                    notificationId = mirrorIdForKey(otpMatch.aggregateKey),
+                    promotedNotification = notification,
+                    sbn = sbn,
+                    appPresentationOverride = appPresentationOverride,
+                    progressOverride = null,
+                    otpOverride = otpMatch,
+                    smartShortTextOverride = null,
+                    otpShortTextOverride = otpShortTextOverride
+                )
+            } catch (error: Throwable) {
+                Log.e(TAG, "Failed OTP auto-copy animation update: ${otpMatch.aggregateKey}", error)
+            }
+        }, delayMs)
+    }
+
+    private fun isOtpAnimationGenerationCurrent(aggregateKey: String, generation: Long): Boolean {
+        return synchronized(stateLock) {
+            val state = otpAggregateStates[aggregateKey] ?: return@synchronized false
+            if (state.activeSbnKeys.isEmpty()) {
+                return@synchronized false
+            }
+            otpAnimationGenerations[aggregateKey] == generation
+        }
+    }
+
+    private fun applySmallIcon(
+        context: Context,
+        builder: NotificationCompat.Builder,
+        sourceIcon: IconCompat?
+    ) {
+        builder.setSmallIcon(
+            sourceIcon ?: IconCompat.createWithResource(context, R.drawable.ic_stat_liveupdate)
+        )
+    }
+
+    private fun resolveSourceSmallIcon(context: Context, sbn: StatusBarNotification): IconCompat? {
+        val source = sbn.notification
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val frameworkSmallIcon = source.smallIcon
+            if (frameworkSmallIcon != null) {
+                try {
+                    return IconCompat.createFromIcon(context, frameworkSmallIcon)
+                } catch (_: Exception) {
+                }
+            }
+        }
+
+        val legacyIconRes = source.icon
+        if (legacyIconRes == 0) {
+            return null
+        }
+
+        return try {
+            val packageContext = context.createPackageContext(sbn.packageName, 0)
+            IconCompat.createWithResource(
+                packageContext.resources,
+                sbn.packageName,
+                legacyIconRes
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun resolveAppSmallIcon(context: Context, packageName: String): IconCompat? {
+        return try {
+            val appInfo = context.packageManager.getApplicationInfo(packageName, 0)
+            if (appInfo.icon == 0) {
+                null
+            } else {
+                val packageContext = context.createPackageContext(packageName, 0)
+                IconCompat.createWithResource(
+                    packageContext.resources,
+                    packageName,
+                    appInfo.icon
+                )
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun buildCopyOtpAction(
+        context: Context,
+        sbn: StatusBarNotification,
+        otpCode: String
+    ): NotificationCompat.Action {
+        val copyIntent = Intent(context, OtpCopyReceiver::class.java).apply {
+            action = OtpCopyReceiver.ACTION_COPY_OTP
+            putExtra(OtpCopyReceiver.EXTRA_OTP_CODE, otpCode)
+        }
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            mirrorIdForKey("${sbn.key}:otp_copy"),
+            copyIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        return NotificationCompat.Action.Builder(
+            IconCompat.createWithResource(context, R.drawable.ic_content_copy_24),
+            otpActionLabel(context),
+            pendingIntent
+        ).build()
+    }
+
+    private fun otpActionLabel(context: Context): String {
+        val locale = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            context.resources.configuration.locales.get(0)
+        } else {
+            @Suppress("DEPRECATION")
+            context.resources.configuration.locale
+        }
+
+        val language = locale?.language?.lowercase(Locale.ROOT).orEmpty()
+        return if (language.startsWith("ru")) "Скопировать код" else "Copy code"
+    }
+
+    private fun copySourceActions(
+        context: Context,
+        source: Notification,
+        builder: NotificationCompat.Builder,
+        maxActions: Int
+    ) {
+        val actions = source.actions ?: return
+        if (actions.isEmpty()) {
+            return
+        }
+
+        actions.take(maxActions.coerceAtLeast(0)).forEach { frameworkAction ->
+            val compatAction = toCompatAction(context, frameworkAction) ?: return@forEach
+            builder.addAction(compatAction)
+        }
+    }
+
+    private fun toCompatAction(
+        context: Context,
+        frameworkAction: Notification.Action
+    ): NotificationCompat.Action? {
+        if (frameworkAction.actionIntent == null) {
+            return null
+        }
+
+        return try {
+            NotificationCompat.Action.Builder.fromAndroidAction(frameworkAction).build()
+        } catch (_: Exception) {
+            val title = frameworkAction.title?.toString()?.takeIf { it.isNotBlank() } ?: "Action"
+            NotificationCompat.Action.Builder(
+                IconCompat.createWithResource(context, R.drawable.ic_stat_liveupdate),
+                title,
+                frameworkAction.actionIntent
+            ).build()
+        }
+    }
+
+    private fun hasProgress(notification: Notification): Boolean {
+        val extras = notification.extras
+        val max = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
+        val indeterminate = extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false)
+        return max > 0 || indeterminate
+    }
+
+    private fun extractTitle(notification: Notification, fallbackName: String): String {
+        val extras = notification.extras
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)
+            ?: extras.getCharSequence(Notification.EXTRA_TITLE_BIG)
+        return title?.toString()?.takeIf { it.isNotBlank() } ?: fallbackName
+    }
+
+    private fun extractText(notification: Notification): String {
+        val extras = notification.extras
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)
+            ?: extras.getCharSequence(Notification.EXTRA_BIG_TEXT)
+            ?: extras.getCharSequence(Notification.EXTRA_SUB_TEXT)
+        return text?.toString()?.takeIf { it.isNotBlank() } ?: "Live update in progress"
+    }
+
+    private fun collectNotificationText(notification: Notification, fallbackTitle: String): String {
+        val extras = notification.extras
+        val parts = mutableListOf<String>()
+
+        fun add(value: CharSequence?) {
+            val text = value?.toString()?.trim().orEmpty()
+            if (text.isNotBlank()) {
+                parts.add(text)
+            }
+        }
+
+        add(extras.getCharSequence(Notification.EXTRA_TITLE))
+        add(extras.getCharSequence(Notification.EXTRA_TEXT))
+        add(extras.getCharSequence(Notification.EXTRA_SUB_TEXT))
+
+        if (parts.isEmpty()) {
+            parts.add(fallbackTitle)
+        }
+
+        return parts
+            .distinct()
+            .joinToString(" ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    private fun resolveAppName(context: Context, packageName: String): String {
+        return try {
+            val appInfo = context.packageManager.getApplicationInfo(packageName, 0)
+            context.packageManager.getApplicationLabel(appInfo).toString()
+        } catch (_: PackageManager.NameNotFoundException) {
+            packageName
+        }
+    }
+
+    private fun mirrorIdForKey(key: String): Int {
+        val value = key.hashCode()
+        return if (value == Int.MIN_VALUE) 0 else abs(value)
+    }
+
+    private fun clearAggregateTrackingForSbnKeyLocked(sbnKey: String): List<Int> {
+        val idsToCancel = mutableListOf<Int>()
+        idsToCancel.addAll(clearSmartTrackingForSbnKeyLocked(sbnKey))
+        idsToCancel.addAll(clearOtpTrackingForSbnKeyLocked(sbnKey))
+        return idsToCancel
+    }
+
+    private fun clearSmartTrackingForSbnKeyLocked(sbnKey: String): List<Int> {
+        val idsToCancel = mutableListOf<Int>()
+        val smartAggregateKey = sbnToAggregateKey.remove(sbnKey)
+        if (smartAggregateKey != null) {
+            val state = aggregateStates[smartAggregateKey]
+            if (state != null) {
+                state.activeSbnKeys.remove(sbnKey)
+                if (state.activeSbnKeys.isEmpty()) {
+                    aggregateStates.remove(smartAggregateKey)
+                    idsToCancel.add(mirrorIdForKey(smartAggregateKey))
+                }
+            } else {
+                idsToCancel.add(mirrorIdForKey(smartAggregateKey))
+            }
+        }
+        return idsToCancel
+    }
+
+    private fun clearOtpTrackingForSbnKeyLocked(sbnKey: String): List<Int> {
+        val idsToCancel = mutableListOf<Int>()
+        val sourceKey = sbnToOtpSourceKey.remove(sbnKey)
+        val otpAggregateKey = sbnToOtpAggregateKey.remove(sbnKey)
+        if (otpAggregateKey != null) {
+            val state = otpAggregateStates[otpAggregateKey]
+            if (state != null) {
+                state.activeSbnKeys.remove(sbnKey)
+                if (state.activeSbnKeys.isEmpty()) {
+                    otpAggregateStates.remove(otpAggregateKey)
+                    otpAnimationGenerations.remove(otpAggregateKey)
+                    idsToCancel.add(mirrorIdForKey(otpAggregateKey))
+                }
+            } else {
+                otpAnimationGenerations.remove(otpAggregateKey)
+                idsToCancel.add(mirrorIdForKey(otpAggregateKey))
+            }
+        }
+        if (sourceKey != null) {
+            val sourceState = otpSourceStates[sourceKey]
+            if (sourceState != null && sourceState.sbnKey == sbnKey) {
+                otpSourceStates.remove(sourceKey)
+            }
+        }
+        return idsToCancel
+    }
+
+    private fun clearOtpTrackingForSourceLocked(sourceKey: String, exceptSbnKey: String): List<Int> {
+        val idsToCancel = mutableListOf<Int>()
+        val sbnKeysToClear = sbnToOtpSourceKey.entries
+            .filter { it.value == sourceKey && it.key != exceptSbnKey }
+            .map { it.key }
+
+        for (sbnKey in sbnKeysToClear) {
+            idsToCancel.addAll(clearOtpTrackingForSbnKeyLocked(sbnKey))
+        }
+        return idsToCancel
+    }
+
+    private data class ProgressOverride(
+        val value: Int,
+        val max: Int
+    )
+
+    private data class AggregateState(
+        var maxStageSeen: Int,
+        val maxStage: Int,
+        val activeSbnKeys: MutableSet<String> = mutableSetOf()
+    )
+
+    private data class OtpAggregateState(
+        val activeSbnKeys: MutableSet<String> = mutableSetOf(),
+        var lastRenderedAtMs: Long = 0L,
+        var lastAutoCopiedCode: String = "",
+        var lastAutoCopiedAtMs: Long = 0L
+    )
+
+    private data class OtpSourceState(
+        val sbnKey: String,
+        val aggregateKey: String,
+        val postTimeMs: Long
+    )
+
+    private data class OtpRouteState(
+        val staleAggregateIds: List<Int>,
+        val shouldPublish: Boolean,
+        val shouldAutoCopy: Boolean,
+        val otpCode: String
+    )
+
+    private data class SmartRouteState(
+        val staleAggregateIds: List<Int>,
+        val stageValue: Int,
+        val stageMax: Int,
+        val compactOrderCode: String?
+    )
+
+    private data class SmartStageMatch(
+        val aggregateKey: String,
+        val stageValue: Int,
+        val maxStage: Int,
+        val compactOrderCode: String?
+    )
+
+    private data class OtpMatch(
+        val code: String,
+        val aggregateKey: String
+    )
+}

@@ -21,12 +21,24 @@ class LiveBridgeHomePage extends StatefulWidget {
 }
 
 class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  static const String _projectGithubUrl =
+      'https://github.com/appsfolder/livebridge';
+  static const String _projectGithubReleasesUrl =
+      'https://github.com/appsfolder/livebridge/releases';
+  static const String _latestReleaseApiUrl =
+      'https://api.github.com/repos/appsfolder/livebridge/releases/latest';
+  static const String _dictionaryRawUrl =
+      'https://raw.githubusercontent.com/appsfolder/livebridge/refs/heads/main/android/app/src/main/assets/liveupdate_dictionary.json';
+  static const Duration _updateCheckInterval = Duration(hours: 6);
+
   final TextEditingController _rulesController = TextEditingController();
   final TextEditingController _otpRulesController = TextEditingController();
 
   Timer? _statusRefreshTimer;
+  Timer? _updateRefreshTimer;
   bool _isRefreshingState = false;
+  bool _isCheckingUpdates = false;
   bool _isLoading = true;
   bool _deviceBlocked = false;
   bool _listenerEnabled = false;
@@ -46,6 +58,10 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
   bool _showSamsungDeveloperWarning = false;
   bool _hidePromotedAccess = false;
   bool _isAospDevice = false;
+  bool _updateChecksEnabled = true;
+  bool _updateAvailable = false;
+  String _latestReleaseVersion = '';
+  String _currentAppVersion = '';
   String _deviceLabelForWarning = '';
   final Set<String> _expandedSections = <String>{};
   bool _expandedSectionsLoaded = false;
@@ -63,10 +79,12 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
       _listenerEnabled &&
       _notificationsGranted &&
       (_hidePromotedAccess || _canPostPromoted);
+  bool get _hasUpdateAlert => _updateChecksEnabled && _updateAvailable;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _masterBlockedShakeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 420),
@@ -108,15 +126,27 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     _statusRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       _refreshState(showLoading: false);
     });
+    _updateRefreshTimer = Timer.periodic(const Duration(minutes: 30), (_) {
+      unawaited(_checkForUpdatesIfNeeded());
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _statusRefreshTimer?.cancel();
+    _updateRefreshTimer?.cancel();
     _masterBlockedShakeController.dispose();
     _rulesController.dispose();
     _otpRulesController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_checkForUpdatesIfNeeded());
+    }
   }
 
   Future<void> _refreshState({bool showLoading = true}) async {
@@ -159,6 +189,14 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
           await LiveBridgePlatform.getOtpDetectionEnabled();
       final bool otpAutoCopyEnabled =
           await LiveBridgePlatform.getOtpAutoCopyEnabled();
+      final bool updateChecksEnabled =
+          await LiveBridgePlatform.getUpdateChecksEnabled();
+      final bool updateCachedAvailable =
+          await LiveBridgePlatform.getUpdateCachedAvailable();
+      final String updateCachedLatestVersion =
+          await LiveBridgePlatform.getUpdateCachedLatestVersion();
+      final String currentAppVersion =
+          await LiveBridgePlatform.getAppVersionName();
       final bool hasCustomParserDictionary =
           await LiveBridgePlatform.hasCustomParserDictionary();
       final bool backgroundWarningDismissed =
@@ -221,6 +259,10 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
         _smartNavigationEnabled = smartNavigationEnabled;
         _otpDetectionEnabled = otpDetectionEnabled;
         _otpAutoCopyEnabled = otpAutoCopyEnabled;
+        _updateChecksEnabled = updateChecksEnabled;
+        _updateAvailable = updateCachedAvailable;
+        _latestReleaseVersion = updateCachedLatestVersion;
+        _currentAppVersion = currentAppVersion;
         _hasCustomParserDictionary = hasCustomParserDictionary;
         _hidePromotedAccess = deviceInfo.shouldHideLiveUpdatesPromotion;
         _isAospDevice = deviceInfo.isAospDevice;
@@ -237,6 +279,10 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
         _otpRulesController.text = otpPackageRules;
         _isLoading = false;
       });
+
+      if (showLoading) {
+        unawaited(_checkForUpdatesIfNeeded());
+      }
     } on PlatformException catch (error) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -285,6 +331,186 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     HapticFeedback.selectionClick();
     setState(() => _aospCuttingEnabled = value);
     await LiveBridgePlatform.setAospCuttingEnabled(value);
+  }
+
+  Future<void> _setUpdateChecksEnabled(bool value) async {
+    HapticFeedback.selectionClick();
+    setState(() => _updateChecksEnabled = value);
+    await LiveBridgePlatform.setUpdateChecksEnabled(value);
+    if (value) {
+      await _checkForUpdatesIfNeeded(force: true);
+    }
+  }
+
+  Future<void> _checkForUpdatesIfNeeded({bool force = false}) async {
+    if (_isCheckingUpdates) {
+      return;
+    }
+    _isCheckingUpdates = true;
+
+    try {
+      final bool checksEnabled =
+          await LiveBridgePlatform.getUpdateChecksEnabled();
+      if (!checksEnabled) {
+        return;
+      }
+
+      final int nowMs = DateTime.now().millisecondsSinceEpoch;
+      final int lastCheckAtMs =
+          await LiveBridgePlatform.getUpdateLastCheckAtMs();
+      if (!force &&
+          lastCheckAtMs > 0 &&
+          nowMs - lastCheckAtMs < _updateCheckInterval.inMilliseconds) {
+        return;
+      }
+
+      await LiveBridgePlatform.setUpdateLastCheckAtMs(nowMs);
+
+      final _GithubReleaseInfo? latest = await _fetchLatestRelease();
+      if (latest == null) {
+        return;
+      }
+
+      final String currentVersion = _currentAppVersion.isNotEmpty
+          ? _currentAppVersion
+          : await LiveBridgePlatform.getAppVersionName();
+      final bool hasUpdate = _isReleaseNewer(
+        currentVersion: currentVersion,
+        latestVersion: latest.version,
+      );
+
+      await LiveBridgePlatform.setUpdateCachedLatestVersion(latest.version);
+      await LiveBridgePlatform.setUpdateCachedAvailable(hasUpdate);
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _currentAppVersion = currentVersion;
+        _latestReleaseVersion = latest.version;
+        _updateAvailable = hasUpdate;
+      });
+
+      if (!hasUpdate) {
+        return;
+      }
+
+      final String lastNotifiedVersion =
+          await LiveBridgePlatform.getUpdateLastNotifiedVersion();
+      if (lastNotifiedVersion == latest.version) {
+        return;
+      }
+
+      final bool notified =
+          await LiveBridgePlatform.showUpdateAvailableNotification(
+            version: latest.version,
+            releaseUrl: latest.htmlUrl,
+          );
+      if (notified) {
+        await LiveBridgePlatform.setUpdateLastNotifiedVersion(latest.version);
+      }
+    } catch (_) {
+    } finally {
+      _isCheckingUpdates = false;
+    }
+  }
+
+  Future<_GithubReleaseInfo?> _fetchLatestRelease() async {
+    final HttpClient client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 8);
+    try {
+      final HttpClientRequest request = await client.getUrl(
+        Uri.parse(_latestReleaseApiUrl),
+      );
+      request.headers.set(
+        HttpHeaders.acceptHeader,
+        'application/vnd.github+json',
+      );
+      request.headers.set(
+        HttpHeaders.userAgentHeader,
+        _currentAppVersion.isNotEmpty
+            ? 'LiveBridge/${_currentAppVersion.trim()}'
+            : 'LiveBridge/update-check',
+      );
+
+      final HttpClientResponse response = await request.close();
+      if (response.statusCode != HttpStatus.ok) {
+        return null;
+      }
+
+      final String payload = await utf8.decoder.bind(response).join();
+      final dynamic decoded = jsonDecode(payload);
+      if (decoded is! Map) {
+        return null;
+      }
+
+      final Map<dynamic, dynamic> data = decoded;
+      final String tag = (data['tag_name'] as String?)?.trim() ?? '';
+      final String name = (data['name'] as String?)?.trim() ?? '';
+      final String htmlUrl = (data['html_url'] as String?)?.trim() ?? '';
+      final String version = tag.isNotEmpty ? tag : name;
+      if (version.isEmpty) {
+        return null;
+      }
+
+      return _GithubReleaseInfo(
+        version: version,
+        htmlUrl: htmlUrl.isNotEmpty ? htmlUrl : _projectGithubReleasesUrl,
+      );
+    } catch (_) {
+      return null;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  bool _isReleaseNewer({
+    required String currentVersion,
+    required String latestVersion,
+  }) {
+    final List<int> currentParts = _extractVersionParts(currentVersion);
+    final List<int> latestParts = _extractVersionParts(latestVersion);
+    if (latestParts.isEmpty) {
+      return false;
+    }
+    if (currentParts.isEmpty) {
+      return false;
+    }
+
+    final int maxLen = currentParts.length > latestParts.length
+        ? currentParts.length
+        : latestParts.length;
+    for (int i = 0; i < maxLen; i++) {
+      final int current = i < currentParts.length ? currentParts[i] : 0;
+      final int latest = i < latestParts.length ? latestParts[i] : 0;
+      if (latest > current) {
+        return true;
+      }
+      if (latest < current) {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  List<int> _extractVersionParts(String input) {
+    final String normalized = input.trim().toLowerCase().replaceFirst(
+      RegExp(r'^v'),
+      '',
+    );
+    if (normalized.isEmpty) {
+      return const <int>[];
+    }
+
+    final List<String> tokens = normalized
+        .split(RegExp(r'[^0-9]+'))
+        .where((String item) => item.isNotEmpty)
+        .toList();
+    if (tokens.isEmpty) {
+      return const <int>[];
+    }
+
+    return tokens.map((String token) => int.tryParse(token) ?? 0).toList();
   }
 
   Future<void> _showMasterBlockedFeedback() async {
@@ -491,6 +717,61 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     }
   }
 
+  Future<void> _updateParserDictionaryFromGithub() async {
+    if (_dictionaryActionInProgress) return;
+    HapticFeedback.selectionClick();
+    setState(() => _dictionaryActionInProgress = true);
+    final AppStrings s = AppStrings.of(context);
+    final HttpClient client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 8);
+
+    try {
+      final HttpClientRequest request = await client.getUrl(
+        Uri.parse(_dictionaryRawUrl),
+      );
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.userAgentHeader,
+        _currentAppVersion.isNotEmpty
+            ? 'LiveBridge/${_currentAppVersion.trim()}'
+            : 'LiveBridge/dictionary-update',
+      );
+
+      final HttpClientResponse response = await request.close();
+      if (response.statusCode != HttpStatus.ok) {
+        _snack(s.dictionaryUpdateFailed);
+        return;
+      }
+
+      final String raw = (await utf8.decoder.bind(response).join()).trim();
+      if (raw.isEmpty) {
+        _snack(s.dictionaryEmpty);
+        return;
+      }
+      final dynamic decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        _snack(s.dictionaryInvalid);
+        return;
+      }
+
+      final bool saved = await LiveBridgePlatform.setCustomParserDictionary(
+        raw,
+      );
+      if (!mounted) return;
+      if (saved) {
+        setState(() => _hasCustomParserDictionary = true);
+        _snack(s.dictionaryUpdateDone);
+      } else {
+        _snack(s.dictionaryUpdateFailed);
+      }
+    } catch (_) {
+      if (mounted) _snack(s.dictionaryUpdateFailed);
+    } finally {
+      client.close(force: true);
+      if (mounted) setState(() => _dictionaryActionInProgress = false);
+    }
+  }
+
   Future<void> _uploadParserDictionary() async {
     if (_dictionaryActionInProgress) return;
     HapticFeedback.selectionClick();
@@ -569,7 +850,9 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
   }
 
   Future<void> _openGithub() async {
-    final Uri uri = Uri.parse('https://github.com/appsfolder/livebridge');
+    final Uri uri = Uri.parse(
+      _hasUpdateAlert ? _projectGithubReleasesUrl : _projectGithubUrl,
+    );
     final bool opened = await launchUrl(
       uri,
       mode: LaunchMode.externalApplication,
@@ -849,10 +1132,13 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
   }
 
   Widget _buildSettingsCard(AppStrings s) {
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+
     return _sectionPanel(
       sectionId: 'settings',
       title: s.settingsTitle,
       icon: Icons.settings_rounded,
+      collapsedStatusOk: _hasUpdateAlert ? false : null,
       child: Column(
         children: <Widget>[
           SwitchListTile.adaptive(
@@ -867,12 +1153,30 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
                   ? s.keepAliveForegroundSubtitle
                   : s.keepAliveForegroundInactiveSubtitle,
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: colorScheme.onSurfaceVariant,
                 fontSize: 13,
               ),
             ),
             contentPadding: EdgeInsets.zero,
-            activeThumbColor: Theme.of(context).colorScheme.primary,
+            activeThumbColor: colorScheme.primary,
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile.adaptive(
+            value: _updateChecksEnabled,
+            onChanged: _setUpdateChecksEnabled,
+            title: Text(
+              s.updateChecksTitle,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              s.updateChecksSubtitle,
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontSize: 13,
+              ),
+            ),
+            contentPadding: EdgeInsets.zero,
+            activeThumbColor: colorScheme.primary,
           ),
           if (_isAospDevice) ...<Widget>[
             const SizedBox(height: 8),
@@ -886,12 +1190,12 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
               subtitle: Text(
                 s.aospCuttingSubtitle,
                 style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  color: colorScheme.onSurfaceVariant,
                   fontSize: 13,
                 ),
               ),
               contentPadding: EdgeInsets.zero,
-              activeThumbColor: Theme.of(context).colorScheme.primary,
+              activeThumbColor: colorScheme.primary,
             ),
           ],
           const SizedBox(height: 12),
@@ -901,6 +1205,17 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
               onPressed: _openAppPresentationSettings,
               icon: const Icon(Icons.tune_rounded, size: 18),
               label: Text(s.appPresentationSettings),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _dictionaryActionInProgress
+                  ? null
+                  : _updateParserDictionaryFromGithub,
+              icon: const Icon(Icons.system_update_alt_rounded, size: 18),
+              label: Text(s.updateDictionary),
             ),
           ),
           const SizedBox(height: 10),
@@ -939,6 +1254,33 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
             ),
           ],
           const SizedBox(height: 8),
+          if (_hasUpdateAlert) ...<Widget>[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: colorScheme.errorContainer.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: colorScheme.error.withValues(alpha: 0.24),
+                  ),
+                ),
+                child: Text(
+                  s.updateAvailableBanner(_latestReleaseVersion),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.error,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           InkWell(
             borderRadius: BorderRadius.circular(14),
             onTap: _openGithub,
@@ -946,24 +1288,45 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                color: _hasUpdateAlert
+                    ? colorScheme.errorContainer.withValues(alpha: 0.55)
+                    : colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.3,
+                      ),
                 borderRadius: BorderRadius.circular(14),
+                border: _hasUpdateAlert
+                    ? Border.all(
+                        color: colorScheme.error.withValues(alpha: 0.28),
+                        width: 1.1,
+                      )
+                    : null,
               ),
               child: Row(
                 children: <Widget>[
-                  const Icon(Icons.code_rounded, size: 20),
+                  Icon(
+                    Icons.code_rounded,
+                    size: 20,
+                    color: _hasUpdateAlert
+                        ? colorScheme.error
+                        : colorScheme.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      s.githubUrl,
+                      _hasUpdateAlert ? s.githubReleasesUrl : s.githubUrl,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w600,
+                        color: _hasUpdateAlert ? colorScheme.error : null,
                       ),
                     ),
                   ),
-                  const Icon(Icons.open_in_new_rounded, size: 18),
+                  Icon(
+                    Icons.open_in_new_rounded,
+                    size: 18,
+                    color: _hasUpdateAlert
+                        ? colorScheme.error
+                        : colorScheme.onSurfaceVariant,
+                  ),
                 ],
               ),
             ),
@@ -1618,4 +1981,11 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
       ),
     );
   }
+}
+
+class _GithubReleaseInfo {
+  const _GithubReleaseInfo({required this.version, required this.htmlUrl});
+
+  final String version;
+  final String htmlUrl;
 }

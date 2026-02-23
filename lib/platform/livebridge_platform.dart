@@ -58,6 +58,39 @@ class LiveBridgePlatform {
       _askBool('getKeepAliveForegroundEnabled');
   static Future<bool> setKeepAliveForegroundEnabled(bool value) =>
       _askBool('setKeepAliveForegroundEnabled', {'value': value});
+  static Future<bool> getUpdateChecksEnabled() =>
+      _askBool('getUpdateChecksEnabled');
+  static Future<bool> setUpdateChecksEnabled(bool value) =>
+      _askBool('setUpdateChecksEnabled', {'value': value});
+  static Future<int> getUpdateLastCheckAtMs() async {
+    final num? value = await _channel.invokeMethod<num>(
+      'getUpdateLastCheckAtMs',
+    );
+    return value?.toInt() ?? 0;
+  }
+
+  static Future<bool> setUpdateLastCheckAtMs(int value) =>
+      _askBool('setUpdateLastCheckAtMs', {'value': value});
+  static Future<String> getUpdateCachedLatestVersion() =>
+      _askStr('getUpdateCachedLatestVersion');
+  static Future<bool> setUpdateCachedLatestVersion(String value) =>
+      _askBool('setUpdateCachedLatestVersion', {'value': value});
+  static Future<bool> getUpdateCachedAvailable() =>
+      _askBool('getUpdateCachedAvailable');
+  static Future<bool> setUpdateCachedAvailable(bool value) =>
+      _askBool('setUpdateCachedAvailable', {'value': value});
+  static Future<String> getUpdateLastNotifiedVersion() =>
+      _askStr('getUpdateLastNotifiedVersion');
+  static Future<bool> setUpdateLastNotifiedVersion(String value) =>
+      _askBool('setUpdateLastNotifiedVersion', {'value': value});
+  static Future<String> getAppVersionName() => _askStr('getAppVersionName');
+  static Future<bool> showUpdateAvailableNotification({
+    required String version,
+    required String releaseUrl,
+  }) => _askBool('showUpdateAvailableNotification', {
+    'version': version,
+    'releaseUrl': releaseUrl,
+  });
   static Future<bool> getAospCuttingEnabled() =>
       _askBool('getAospCuttingEnabled');
   static Future<bool> setAospCuttingEnabled(bool value) =>

@@ -52,10 +52,15 @@ class AppStrings {
   String get dictionaryUploadDone => isRu
       ? 'Пользовательский словарь загружен.'
       : 'Custom dictionary uploaded.';
+  String get dictionaryUpdateDone =>
+      isRu ? 'Словарь обновлен из GitHub.' : 'Dictionary updated from GitHub.';
   String get dictionaryInvalid =>
       isRu ? 'Невалидный JSON словаря.' : 'Invalid dictionary JSON.';
   String get dictionaryUploadFailed =>
       isRu ? 'Не удалось загрузить словарь.' : 'Failed to upload dictionary.';
+  String get dictionaryUpdateFailed => isRu
+      ? 'Не удалось обновить словарь из GitHub.'
+      : 'Failed to update dictionary from GitHub.';
   String get dictionaryResetDone => isRu
       ? 'Возвращен словарь из приложения.'
       : 'Bundled dictionary restored.';
@@ -67,6 +72,7 @@ class AppStrings {
       ? 'Сначала выдайте доступ к уведомлениям и разрешение на уведомления.'
       : 'Grant notification listener access and notifications permission first.';
   String get githubUrl => 'github.com/appsfolder/livebridge';
+  String get githubReleasesUrl => 'github.com/appsfolder/livebridge/releases';
   String get hideWarningBanner => isRu ? 'Скрыть' : 'Hide';
   String get backgroundWarningTitle =>
       isRu ? 'Важно для фоновой работы' : 'Background mode warning';
@@ -102,6 +108,14 @@ class AppStrings {
   String get keepAliveForegroundInactiveSubtitle => isRu
       ? 'Включите LiveBridge, чтобы режим начал работать.'
       : 'Enable the LiveBridge for this mode to take effect.';
+  String get updateChecksTitle =>
+      isRu ? 'Проверка обновлений' : 'Update checking';
+  String get updateChecksSubtitle => isRu
+      ? 'Проверять обновления при входе и не чаще одного раза в 6 часов.'
+      : 'Check updates on app start, and no more than once every 6 hours.';
+  String updateAvailableBanner(String version) => isRu
+      ? 'Доступно обновление${version.isNotEmpty ? ': $version' : ''}'
+      : 'Update available${version.isNotEmpty ? ': $version' : ''}';
   String get aospCuttingTitle => isRu ? 'Обрезка AOSP' : 'AOSP cutting';
   String get aospCuttingSubtitle => isRu
       ? 'Обрезать информацию в острове до 7 символов для красивого отображения в AOSP-прошивках.'
@@ -152,6 +166,8 @@ class AppStrings {
   String get save => isRu ? 'Сохранить' : 'Save';
   String get downloadDictionary =>
       isRu ? 'Скачать словарь' : 'Download dictionary';
+  String get updateDictionary =>
+      isRu ? 'Обновить словарь' : 'Update dictionary';
   String get uploadDictionary =>
       isRu ? 'Загрузить словарь' : 'Upload dictionary';
   String get resetDictionary => isRu ? 'Сбросить словарь' : 'Reset dictionary';

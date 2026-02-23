@@ -61,6 +61,48 @@ class ConverterPrefs(context: Context) {
         prefs.edit().putBoolean(KEY_KEEP_ALIVE_FOREGROUND_ENABLED, value).apply()
     }
 
+    fun getUpdateChecksEnabled(): Boolean {
+        return prefs.getBoolean(KEY_UPDATE_CHECKS_ENABLED, true)
+    }
+
+    fun setUpdateChecksEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_UPDATE_CHECKS_ENABLED, value).apply()
+    }
+
+    fun getUpdateLastCheckAtMs(): Long {
+        return prefs.getLong(KEY_UPDATE_LAST_CHECK_AT_MS, 0L)
+    }
+
+    fun setUpdateLastCheckAtMs(value: Long) {
+        prefs.edit().putLong(KEY_UPDATE_LAST_CHECK_AT_MS, value).apply()
+    }
+
+    fun getUpdateCachedLatestVersion(): String {
+        return prefs.getString(KEY_UPDATE_CACHED_LATEST_VERSION, "") ?: ""
+    }
+
+    fun setUpdateCachedLatestVersion(value: String?) {
+        val normalized = value?.trim().orEmpty()
+        prefs.edit().putString(KEY_UPDATE_CACHED_LATEST_VERSION, normalized).apply()
+    }
+
+    fun getUpdateCachedAvailable(): Boolean {
+        return prefs.getBoolean(KEY_UPDATE_CACHED_AVAILABLE, false)
+    }
+
+    fun setUpdateCachedAvailable(value: Boolean) {
+        prefs.edit().putBoolean(KEY_UPDATE_CACHED_AVAILABLE, value).apply()
+    }
+
+    fun getUpdateLastNotifiedVersion(): String {
+        return prefs.getString(KEY_UPDATE_LAST_NOTIFIED_VERSION, "") ?: ""
+    }
+
+    fun setUpdateLastNotifiedVersion(value: String?) {
+        val normalized = value?.trim().orEmpty()
+        prefs.edit().putString(KEY_UPDATE_LAST_NOTIFIED_VERSION, normalized).apply()
+    }
+
     fun getAospCuttingEnabled(): Boolean {
         return prefs.getBoolean(KEY_AOSP_CUTTING_ENABLED, false)
     }
@@ -255,6 +297,11 @@ class ConverterPrefs(context: Context) {
         private const val KEY_ONLY_WITH_PROGRESS = "only_with_progress"
         private const val KEY_CONVERTER_ENABLED = "converter_enabled"
         private const val KEY_KEEP_ALIVE_FOREGROUND_ENABLED = "keep_alive_foreground_enabled"
+        private const val KEY_UPDATE_CHECKS_ENABLED = "update_checks_enabled"
+        private const val KEY_UPDATE_LAST_CHECK_AT_MS = "update_last_check_at_ms"
+        private const val KEY_UPDATE_CACHED_LATEST_VERSION = "update_cached_latest_version"
+        private const val KEY_UPDATE_CACHED_AVAILABLE = "update_cached_available"
+        private const val KEY_UPDATE_LAST_NOTIFIED_VERSION = "update_last_notified_version"
         private const val KEY_AOSP_CUTTING_ENABLED = "aosp_cutting_enabled"
         private const val KEY_SMART_STATUS_ENABLED = "smart_status_enabled"
         private const val KEY_SMART_NAVIGATION_ENABLED = "smart_navigation_enabled"

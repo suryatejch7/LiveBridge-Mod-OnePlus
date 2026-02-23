@@ -1,7 +1,9 @@
 package com.appsfolder.livebridge
 
 import android.Manifest
+import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.ContentValues
@@ -20,6 +22,7 @@ import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import android.util.Log
 import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.appsfolder.livebridge.liveupdate.AppPresentationOverridesCodec
@@ -242,6 +245,47 @@ class MainActivity : FlutterActivity() {
                 res.success(true)
             }
 
+            "getUpdateChecksEnabled" -> res.success(prefs.getUpdateChecksEnabled())
+            "setUpdateChecksEnabled" -> {
+                prefs.setUpdateChecksEnabled(call.argument<Boolean>("value") ?: true)
+                res.success(true)
+            }
+
+            "getUpdateLastCheckAtMs" -> res.success(prefs.getUpdateLastCheckAtMs())
+            "setUpdateLastCheckAtMs" -> {
+                prefs.setUpdateLastCheckAtMs(call.argument<Number>("value")?.toLong() ?: 0L)
+                res.success(true)
+            }
+
+            "getUpdateCachedLatestVersion" -> res.success(prefs.getUpdateCachedLatestVersion())
+            "setUpdateCachedLatestVersion" -> {
+                prefs.setUpdateCachedLatestVersion(call.argument<String>("value"))
+                res.success(true)
+            }
+
+            "getUpdateCachedAvailable" -> res.success(prefs.getUpdateCachedAvailable())
+            "setUpdateCachedAvailable" -> {
+                prefs.setUpdateCachedAvailable(call.argument<Boolean>("value") ?: false)
+                res.success(true)
+            }
+
+            "getUpdateLastNotifiedVersion" -> res.success(prefs.getUpdateLastNotifiedVersion())
+            "setUpdateLastNotifiedVersion" -> {
+                prefs.setUpdateLastNotifiedVersion(call.argument<String>("value"))
+                res.success(true)
+            }
+
+            "getAppVersionName" -> res.success(getAppVersionName())
+            "showUpdateAvailableNotification" -> {
+                val version = call.argument<String>("version")?.trim().orEmpty()
+                val releaseUrl = call.argument<String>("releaseUrl")?.trim().orEmpty()
+                if (version.isEmpty()) {
+                    res.success(false)
+                } else {
+                    res.success(showUpdateAvailableNotification(version, releaseUrl))
+                }
+            }
+
             "getAospCuttingEnabled" -> res.success(prefs.getAospCuttingEnabled())
             "setAospCuttingEnabled" -> {
                 prefs.setAospCuttingEnabled(call.argument<Boolean>("value") ?: false)
@@ -356,6 +400,108 @@ class MainActivity : FlutterActivity() {
         if (isLikelyChineseDevice()) {
             prefs.setKeepAliveForegroundEnabled(true)
         }
+    }
+
+    private fun getAppVersionName(): String {
+        return try {
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(
+                    packageName,
+                    PackageManager.PackageInfoFlags.of(0L)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(packageName, 0)
+            }
+            packageInfo.versionName?.trim().orEmpty()
+        } catch (error: Throwable) {
+            Log.e(TAG, "Failed to resolve app version", error)
+            ""
+        }
+    }
+
+    private fun showUpdateAvailableNotification(version: String, releaseUrl: String): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !isNotificationPermissionGranted()) {
+            return false
+        }
+
+        val manager = NotificationManagerCompat.from(applicationContext)
+        if (!manager.areNotificationsEnabled()) {
+            return false
+        }
+
+        ensureUpdateNotificationChannel()
+
+        val normalizedReleaseUrl = releaseUrl.ifBlank { DEFAULT_RELEASES_URL }
+        val openReleaseIntent = Intent(Intent.ACTION_VIEW, Uri.parse(normalizedReleaseUrl)).apply {
+            addCategory(Intent.CATEGORY_BROWSABLE)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val contentIntent = PendingIntent.getActivity(
+            this,
+            UPDATE_NOTIFICATION_ID,
+            openReleaseIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val isRuLocale = isRussianLocale()
+        val title = if (isRuLocale) {
+            "Доступно обновление LiveBridge"
+        } else {
+            "LiveBridge update available"
+        }
+        val content = if (isRuLocale) {
+            "Новая версия: $version"
+        } else {
+            "New version: $version"
+        }
+
+        val notification = NotificationCompat.Builder(applicationContext, UPDATE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_liveupdate)
+            .setContentTitle(title)
+            .setContentText(content)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(content))
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(contentIntent)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+
+        manager.notify(UPDATE_NOTIFICATION_ID, notification)
+        return true
+    }
+
+    private fun ensureUpdateNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return
+        }
+
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (manager.getNotificationChannel(UPDATE_CHANNEL_ID) != null) {
+            return
+        }
+
+        val channel = NotificationChannel(
+            UPDATE_CHANNEL_ID,
+            UPDATE_CHANNEL_NAME,
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "LiveBridge app update notifications"
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+        }
+        manager.createNotificationChannel(channel)
+    }
+
+    private fun isRussianLocale(): Boolean {
+        val locale = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            resources.configuration.locales.get(0)
+        } else {
+            @Suppress("DEPRECATION")
+            resources.configuration.locale
+        }
+        val language = locale?.language?.lowercase(Locale.ROOT).orEmpty()
+        return language.startsWith("ru")
     }
 
     private fun isLikelyChineseDevice(): Boolean {
@@ -632,6 +778,10 @@ class MainActivity : FlutterActivity() {
         private const val TAG = "MainActivity"
         private const val INSTALLED_APPS_CACHE_TTL_MS = 10 * 60 * 1000L
         private const val MAX_ICON_CACHE_SIZE = 512
+        private const val UPDATE_CHANNEL_ID = "livebridge_update_checks"
+        private const val UPDATE_CHANNEL_NAME = "LiveBridge Updates"
+        private const val UPDATE_NOTIFICATION_ID = 32001
+        private const val DEFAULT_RELEASES_URL = "https://github.com/appsfolder/livebridge/releases"
 
         private val installedAppsCacheLock = Any()
         private var installedAppsCache: List<Map<String, Any>>? = null

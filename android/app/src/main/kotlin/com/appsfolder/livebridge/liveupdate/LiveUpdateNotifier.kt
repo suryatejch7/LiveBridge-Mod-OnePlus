@@ -112,9 +112,9 @@ object LiveUpdateNotifier {
 
         return try {
             val parserDictionary = LiveParserDictionaryLoader.get(context, prefs)
-            val appPresentationOverride =
-                AppPresentationOverridesLoader.get(prefs)[sbn.packageName.lowercase(Locale.ROOT)]
-                    ?: AppPresentationOverride()
+            val appPresentationOverride = AppPresentationOverridesLoader
+                .get(prefs)
+                .resolve(sbn.packageName.lowercase(Locale.ROOT))
             val source = sbn.notification
             val hasNativeProgress = hasProgress(source)
 
@@ -473,7 +473,7 @@ object LiveUpdateNotifier {
         } else {
             builder.setStyle(NotificationCompat.BigTextStyle().bigText(text))
         }
-        if (smartShortTextOverride != null) {
+        if (smartShortTextOverride != null && !hasProgress) {
             builder.setContentText(smartShortTextOverride)
         }
 

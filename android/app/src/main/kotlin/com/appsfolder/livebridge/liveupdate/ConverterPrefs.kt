@@ -182,13 +182,9 @@ class ConverterPrefs(context: Context) {
         val mode = PackageMode.from(getPackageMode())
         val packages = parsePackageRules(getPackageRulesRaw())
 
-        if (packages.isEmpty()) {
-            return true
-        }
-
         return when (mode) {
             PackageMode.ALL -> true
-            PackageMode.INCLUDE -> packageName in packages
+            PackageMode.INCLUDE -> packages.isNotEmpty() && packageName in packages
             PackageMode.EXCLUDE -> packageName !in packages
         }
     }
@@ -197,13 +193,9 @@ class ConverterPrefs(context: Context) {
         val mode = PackageMode.from(getOtpPackageMode())
         val packages = parsePackageRules(getOtpPackageRulesRaw())
 
-        if (packages.isEmpty()) {
-            return true
-        }
-
         return when (mode) {
             PackageMode.ALL -> true
-            PackageMode.INCLUDE -> packageName in packages
+            PackageMode.INCLUDE -> packages.isNotEmpty() && packageName in packages
             PackageMode.EXCLUDE -> packageName !in packages
         }
     }

@@ -37,14 +37,28 @@ internal data class AppPresentationOverride(
     }
 }
 
+internal data class AppPresentationOverridesState(
+    val defaultOverride: AppPresentationOverride = AppPresentationOverride(),
+    val packageOverrides: Map<String, AppPresentationOverride> = emptyMap()
+) {
+    fun resolve(packageNameLower: String): AppPresentationOverride {
+        return packageOverrides[packageNameLower] ?: defaultOverride
+    }
+
+    fun isEmpty(): Boolean {
+        return defaultOverride.isDefault() && packageOverrides.isEmpty()
+    }
+}
+
 internal object AppPresentationOverridesCodec {
     private const val KEY_COMPACT_TEXT = "compact_text"
     private const val KEY_ICON_SOURCE = "icon_source"
+    private const val KEY_DEFAULT_OVERRIDE = "__default__"
 
-    fun parse(raw: String?): Map<String, AppPresentationOverride>? {
+    fun parse(raw: String?): AppPresentationOverridesState? {
         val normalized = raw?.trim().orEmpty()
         if (normalized.isEmpty()) {
-            return emptyMap()
+            return AppPresentationOverridesState()
         }
 
         val root = try {
@@ -53,38 +67,41 @@ internal object AppPresentationOverridesCodec {
             return null
         }
 
+        val defaultOverride = parseEntry(root.optJSONObject(KEY_DEFAULT_OVERRIDE))
+            ?: AppPresentationOverride()
         val values = mutableMapOf<String, AppPresentationOverride>()
         val keys = root.keys()
         while (keys.hasNext()) {
             val key = keys.next()
+            if (key == KEY_DEFAULT_OVERRIDE) {
+                continue
+            }
             val packageName = key.trim().lowercase(Locale.ROOT)
             if (packageName.isEmpty()) {
                 continue
             }
-            val item = root.optJSONObject(key) ?: continue
-            val entry = AppPresentationOverride(
-                compactTextSource = CompactTextSource.from(item.optString(KEY_COMPACT_TEXT)),
-                iconSource = NotificationIconSource.from(item.optString(KEY_ICON_SOURCE))
-            )
-            if (!entry.isDefault()) {
+            val entry = parseEntry(root.optJSONObject(key)) ?: continue
+            if (entry != defaultOverride) {
                 values[packageName] = entry
             }
         }
 
-        return values
+        return AppPresentationOverridesState(
+            defaultOverride = defaultOverride,
+            packageOverrides = values
+        )
     }
 
-    fun encode(overrides: Map<String, AppPresentationOverride>): String {
+    fun encode(state: AppPresentationOverridesState): String {
         val root = JSONObject()
-        overrides.toSortedMap().forEach { (packageName, entry) ->
-            if (entry.isDefault()) {
+        if (!state.defaultOverride.isDefault()) {
+            root.put(KEY_DEFAULT_OVERRIDE, encodeEntry(state.defaultOverride))
+        }
+        state.packageOverrides.toSortedMap().forEach { (packageName, entry) ->
+            if (entry == state.defaultOverride) {
                 return@forEach
             }
-            val item = JSONObject().apply {
-                put(KEY_COMPACT_TEXT, entry.compactTextSource.id)
-                put(KEY_ICON_SOURCE, entry.iconSource.id)
-            }
-            root.put(packageName, item)
+            root.put(packageName, encodeEntry(entry))
         }
         return root.toString()
     }
@@ -98,6 +115,21 @@ internal object AppPresentationOverridesCodec {
         val parsed = parse(raw) ?: return null
         return encode(parsed)
     }
+
+    private fun parseEntry(item: JSONObject?): AppPresentationOverride? {
+        item ?: return null
+        return AppPresentationOverride(
+            compactTextSource = CompactTextSource.from(item.optString(KEY_COMPACT_TEXT)),
+            iconSource = NotificationIconSource.from(item.optString(KEY_ICON_SOURCE))
+        )
+    }
+
+    private fun encodeEntry(entry: AppPresentationOverride): JSONObject {
+        return JSONObject().apply {
+            put(KEY_COMPACT_TEXT, entry.compactTextSource.id)
+            put(KEY_ICON_SOURCE, entry.iconSource.id)
+        }
+    }
 }
 
 internal object AppPresentationOverridesLoader {
@@ -105,9 +137,9 @@ internal object AppPresentationOverridesLoader {
     private var cachedRaw: String? = null
 
     @Volatile
-    private var cachedOverrides: Map<String, AppPresentationOverride> = emptyMap()
+    private var cachedOverrides: AppPresentationOverridesState = AppPresentationOverridesState()
 
-    fun get(prefs: ConverterPrefs): Map<String, AppPresentationOverride> {
+    fun get(prefs: ConverterPrefs): AppPresentationOverridesState {
         val raw = prefs.getAppPresentationOverridesRaw()
         cachedOverrides.let { existing ->
             if (cachedRaw == raw) {
@@ -122,7 +154,7 @@ internal object AppPresentationOverridesLoader {
                 }
             }
 
-            val parsed = AppPresentationOverridesCodec.parse(raw) ?: emptyMap()
+            val parsed = AppPresentationOverridesCodec.parse(raw) ?: AppPresentationOverridesState()
             cachedRaw = raw
             cachedOverrides = parsed
             return parsed
@@ -132,7 +164,7 @@ internal object AppPresentationOverridesLoader {
     fun invalidate() {
         synchronized(this) {
             cachedRaw = null
-            cachedOverrides = emptyMap()
+            cachedOverrides = AppPresentationOverridesState()
         }
     }
 }

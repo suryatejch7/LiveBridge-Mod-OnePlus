@@ -11,6 +11,18 @@ import '../models/app_models.dart';
 import '../platform/livebridge_platform.dart';
 import '../widgets/shared_widgets.dart';
 
+const String _defaultAppPresentationKey = '__default__';
+
+class _ParsedAppPresentationOverrides {
+  const _ParsedAppPresentationOverrides({
+    required this.defaultOverride,
+    required this.packageOverrides,
+  });
+
+  final AppPresentationOverride defaultOverride;
+  final Map<String, AppPresentationOverride> packageOverrides;
+}
+
 class AppPresentationSettingsPage extends StatefulWidget {
   const AppPresentationSettingsPage({super.key});
 
@@ -24,6 +36,7 @@ class _AppPresentationSettingsPageState
   bool _isLoading = true;
   bool _busy = false;
   List<InstalledApp> _apps = const [];
+  AppPresentationOverride _defaultOverride = const AppPresentationOverride();
   Map<String, AppPresentationOverride> _overrides = {};
   String _q = '';
 
@@ -33,29 +46,65 @@ class _AppPresentationSettingsPageState
     _load();
   }
 
-  Map<String, AppPresentationOverride> _parseOverrides(String raw) {
-    final normalized = raw.trim();
-    if (normalized.isEmpty) return {};
-    final decoded = jsonDecode(normalized);
-    if (decoded is! Map) return {};
+  bool _isSameOverride(AppPresentationOverride a, AppPresentationOverride b) {
+    return a.compactTextSource == b.compactTextSource &&
+        a.iconSource == b.iconSource;
+  }
 
+  _ParsedAppPresentationOverrides _parseOverrides(String raw) {
+    final normalized = raw.trim();
+    if (normalized.isEmpty) {
+      return const _ParsedAppPresentationOverrides(
+        defaultOverride: AppPresentationOverride(),
+        packageOverrides: <String, AppPresentationOverride>{},
+      );
+    }
+    final decoded = jsonDecode(normalized);
+    if (decoded is! Map) {
+      return const _ParsedAppPresentationOverrides(
+        defaultOverride: AppPresentationOverride(),
+        packageOverrides: <String, AppPresentationOverride>{},
+      );
+    }
+
+    AppPresentationOverride defaultOverride = const AppPresentationOverride();
+    if (decoded[_defaultAppPresentationKey] is Map) {
+      defaultOverride = AppPresentationOverride.fromJsonEntry(
+        Map<String, dynamic>.from(decoded[_defaultAppPresentationKey] as Map),
+      );
+    }
     final Map<String, AppPresentationOverride> values = {};
     for (final entry in decoded.entries) {
       final packageName = (entry.key as String? ?? '').trim().toLowerCase();
-      if (packageName.isEmpty || entry.value is! Map) continue;
+      if (packageName.isEmpty ||
+          packageName == _defaultAppPresentationKey ||
+          entry.value is! Map) {
+        continue;
+      }
       final parsed = AppPresentationOverride.fromJsonEntry(
         Map<String, dynamic>.from(entry.value as Map),
       );
-      if (!parsed.isDefault) values[packageName] = parsed;
+      if (!_isSameOverride(parsed, defaultOverride)) {
+        values[packageName] = parsed;
+      }
     }
-    return values;
+    return _ParsedAppPresentationOverrides(
+      defaultOverride: defaultOverride,
+      packageOverrides: values,
+    );
   }
 
-  String _encodeOverrides(Map<String, AppPresentationOverride> values) {
+  String _encodeOverrides(
+    AppPresentationOverride defaultOverride,
+    Map<String, AppPresentationOverride> values,
+  ) {
     final payload = <String, dynamic>{};
+    if (!defaultOverride.isDefault) {
+      payload[_defaultAppPresentationKey] = defaultOverride.toJsonEntry();
+    }
     for (final packageName in values.keys.toList()..sort()) {
       final value = values[packageName];
-      if (value != null && !value.isDefault) {
+      if (value != null && !_isSameOverride(value, defaultOverride)) {
         payload[packageName] = value.toJsonEntry();
       }
     }
@@ -67,11 +116,12 @@ class _AppPresentationSettingsPageState
     try {
       final apps = await LiveBridgePlatform.getInstalledApps();
       final raw = await LiveBridgePlatform.getAppPresentationOverrides();
-      final overrides = _parseOverrides(raw);
+      final parsed = _parseOverrides(raw);
       if (mounted) {
         setState(() {
           _apps = apps;
-          _overrides = overrides;
+          _defaultOverride = parsed.defaultOverride;
+          _overrides = parsed.packageOverrides;
           _isLoading = false;
         });
       }
@@ -83,11 +133,12 @@ class _AppPresentationSettingsPageState
     }
   }
 
-  Future<void> _persistOverrides(
-    Map<String, AppPresentationOverride> values,
-  ) async {
+  Future<void> _persistOverrides({
+    required AppPresentationOverride defaultOverride,
+    required Map<String, AppPresentationOverride> overrides,
+  }) async {
     final saved = await LiveBridgePlatform.setAppPresentationOverrides(
-      _encodeOverrides(values),
+      _encodeOverrides(defaultOverride, overrides),
     );
     if (!saved && mounted) {
       _snack(AppStrings.of(context).appPresentationSaveFailed);
@@ -96,8 +147,7 @@ class _AppPresentationSettingsPageState
 
   Future<void> _openEditor(InstalledApp app) async {
     final String key = app.packageName.toLowerCase();
-    final AppPresentationOverride current =
-        _overrides[key] ?? const AppPresentationOverride();
+    final AppPresentationOverride current = _overrides[key] ?? _defaultOverride;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -109,14 +159,64 @@ class _AppPresentationSettingsPageState
       builder: (context) => _AppPresentationEditorSheet(
         app: app,
         initialValue: current,
+        resetValue: _defaultOverride,
         onChanged: (AppPresentationOverride updated) {
           final Map<String, AppPresentationOverride> next =
               Map<String, AppPresentationOverride>.from(_overrides);
-          updated.isDefault ? next.remove(key) : next[key] = updated;
+          _isSameOverride(updated, _defaultOverride)
+              ? next.remove(key)
+              : next[key] = updated;
           if (mounted) {
             setState(() => _overrides = next);
           }
-          unawaited(_persistOverrides(next));
+          unawaited(
+            _persistOverrides(
+              defaultOverride: _defaultOverride,
+              overrides: next,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _openDefaultEditor() async {
+    final AppStrings s = AppStrings.of(context);
+    final InstalledApp virtualApp = InstalledApp(
+      packageName: '',
+      label: s.appPresentationDefaultSummary,
+    );
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      builder: (context) => _AppPresentationEditorSheet(
+        app: virtualApp,
+        initialValue: _defaultOverride,
+        resetValue: const AppPresentationOverride(),
+        showResetAction: false,
+        onChanged: (AppPresentationOverride updated) {
+          final Map<String, AppPresentationOverride> next =
+              <String, AppPresentationOverride>{};
+          for (final entry in _overrides.entries) {
+            if (!_isSameOverride(entry.value, updated)) {
+              next[entry.key] = entry.value;
+            }
+          }
+          if (mounted) {
+            setState(() {
+              _defaultOverride = updated;
+              _overrides = next;
+            });
+          }
+          unawaited(
+            _persistOverrides(defaultOverride: updated, overrides: next),
+          );
         },
       ),
     );
@@ -189,10 +289,12 @@ class _AppPresentationSettingsPageState
 
   String _summaryFor(InstalledApp app) {
     final s = AppStrings.of(context);
-    final value =
-        _overrides[app.packageName.toLowerCase()] ??
-        const AppPresentationOverride();
-    if (value.isDefault) return s.appPresentationDefaultSummary;
+    final String key = app.packageName.toLowerCase();
+    final value = _overrides[key] ?? _defaultOverride;
+
+    if (_isSameOverride(value, _defaultOverride)) {
+      return s.appPresentationDefaultSummary;
+    }
 
     final textSummary = value.compactTextSource == AppCompactTextSource.title
         ? s.appPresentationTextTitle
@@ -413,6 +515,12 @@ class _AppPresentationSettingsPageState
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
+                                icon: const Icon(Icons.tune_rounded),
+                                color: colorScheme.primary,
+                                tooltip: '${s.modeAll} • ${s.defaultLabel}',
+                                onPressed: _openDefaultEditor,
+                              ),
+                              IconButton(
                                 icon: const Icon(Icons.download_rounded),
                                 color: colorScheme.primary,
                                 tooltip: s.downloadSettings,
@@ -441,10 +549,14 @@ class _AppPresentationEditorSheet extends StatefulWidget {
   const _AppPresentationEditorSheet({
     required this.app,
     required this.initialValue,
+    required this.resetValue,
+    this.showResetAction = true,
     required this.onChanged,
   });
   final InstalledApp app;
   final AppPresentationOverride initialValue;
+  final AppPresentationOverride resetValue;
+  final bool showResetAction;
   final ValueChanged<AppPresentationOverride> onChanged;
 
   @override
@@ -500,12 +612,16 @@ class _AppPresentationEditorSheetState
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      Text(
-                        widget.app.packageName,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      if (widget.app.packageName.trim().isNotEmpty)
+                        Text(
+                          widget.app.packageName,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -562,17 +678,19 @@ class _AppPresentationEditorSheetState
             const SizedBox(height: 32),
             Row(
               children: [
-                TextButton(
-                  onPressed: () {
-                    HapticFeedback.selectionClick();
-                    setState(() {
-                      _compactTextSource = AppCompactTextSource.title;
-                      _iconSource = AppNotificationIconSource.notification;
-                    });
-                    _emitChanged();
-                  },
-                  child: Text(s.resetToDefault),
-                ),
+                if (widget.showResetAction)
+                  TextButton(
+                    onPressed: () {
+                      HapticFeedback.selectionClick();
+                      setState(() {
+                        _compactTextSource =
+                            widget.resetValue.compactTextSource;
+                        _iconSource = widget.resetValue.iconSource;
+                      });
+                      _emitChanged();
+                    },
+                    child: Text(s.resetToDefault),
+                  ),
                 const Spacer(),
                 FilledButton.icon(
                   onPressed: () {

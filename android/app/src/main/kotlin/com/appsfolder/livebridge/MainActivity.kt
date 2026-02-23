@@ -27,6 +27,7 @@ import com.appsfolder.livebridge.liveupdate.AppPresentationOverridesLoader
 import com.appsfolder.livebridge.liveupdate.ConverterPrefs
 import com.appsfolder.livebridge.liveupdate.DeviceBlocker
 import com.appsfolder.livebridge.liveupdate.DeviceProps
+import com.appsfolder.livebridge.liveupdate.KeepAliveForegroundService
 import com.appsfolder.livebridge.liveupdate.LiveParserDictionary
 import com.appsfolder.livebridge.liveupdate.LiveParserDictionaryLoader
 import com.appsfolder.livebridge.liveupdate.LiveUpdateNotifier
@@ -52,6 +53,10 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             handleMethodCall(call, result)
         }
+
+        val prefs = ConverterPrefs(applicationContext)
+        initializeKeepAliveDefaultIfNeeded(prefs)
+        syncKeepAliveForegroundService(prefs)
     }
 
     override fun onRequestPermissionsResult(
@@ -221,12 +226,31 @@ class MainActivity : FlutterActivity() {
                 } else {
                     requestNotificationListenerRebind()
                 }
+                syncKeepAliveForegroundService(prefs)
+                res.success(true)
+            }
+
+            "getKeepAliveForegroundEnabled" -> {
+                syncKeepAliveForegroundService(prefs)
+                res.success(prefs.getKeepAliveForegroundEnabled())
+            }
+
+            "setKeepAliveForegroundEnabled" -> {
+                val value = call.argument<Boolean>("value") ?: false
+                prefs.setKeepAliveForegroundEnabled(value)
+                syncKeepAliveForegroundService(prefs)
                 res.success(true)
             }
 
             "getSmartStatusDetectionEnabled" -> res.success(prefs.getSmartStatusDetectionEnabled())
             "setSmartStatusDetectionEnabled" -> {
                 prefs.setSmartStatusDetectionEnabled(call.argument<Boolean>("value") ?: true)
+                res.success(true)
+            }
+
+            "getSmartNavigationEnabled" -> res.success(prefs.getSmartNavigationEnabled())
+            "setSmartNavigationEnabled" -> {
+                prefs.setSmartNavigationEnabled(call.argument<Boolean>("value") ?: true)
                 res.success(true)
             }
 
@@ -304,6 +328,42 @@ class MainActivity : FlutterActivity() {
             runCatching { resolver.delete(uri, null, null) }
             null
         }
+    }
+
+    private fun syncKeepAliveForegroundService(prefs: ConverterPrefs) {
+        val shouldRun =
+            prefs.getConverterEnabled() &&
+                    prefs.getKeepAliveForegroundEnabled() &&
+                    isNotificationListenerEnabled() &&
+                    (!DeviceBlocker.isBlockedDevice() || prefs.getPixelJokeBypassEnabled())
+        if (shouldRun) {
+            KeepAliveForegroundService.start(applicationContext)
+        } else {
+            KeepAliveForegroundService.stop(applicationContext)
+        }
+    }
+
+    private fun initializeKeepAliveDefaultIfNeeded(prefs: ConverterPrefs) {
+        if (prefs.hasKeepAliveForegroundPreference()) {
+            return
+        }
+        if (isLikelyChineseDevice()) {
+            prefs.setKeepAliveForegroundEnabled(true)
+        }
+    }
+
+    private fun isLikelyChineseDevice(): Boolean {
+        val manufacturer = (Build.MANUFACTURER ?: "").lowercase(Locale.ROOT)
+        val brand = (Build.BRAND ?: "").lowercase(Locale.ROOT)
+        val fingerprint = (Build.FINGERPRINT ?: "").lowercase(Locale.ROOT)
+        val display = (Build.DISPLAY ?: "").lowercase(Locale.ROOT)
+        val product = (Build.PRODUCT ?: "").lowercase(Locale.ROOT)
+        val combined = "$manufacturer $brand $fingerprint $display $product"
+
+        if (CHINESE_DEVICE_MARKERS.any(combined::contains)) {
+            return true
+        }
+        return CHINESE_ROM_MARKERS.any(combined::contains)
     }
 
     private fun isNotificationListenerEnabled(): Boolean {
@@ -572,5 +632,30 @@ class MainActivity : FlutterActivity() {
         private var installedAppsCacheAtMs: Long = 0L
         private val appIconBytesCache: MutableMap<String, ByteArray> = mutableMapOf()
         private val appsLoaderExecutor = Executors.newSingleThreadExecutor()
+        private val CHINESE_DEVICE_MARKERS = setOf(
+            "xiaomi",
+            "redmi",
+            "poco",
+            "realme",
+            "oppo",
+            "oneplus",
+            "vivo",
+            "iqoo",
+            "huawei",
+            "honor",
+            "zte",
+            "nubia",
+            "meizu",
+            "lenovo"
+        )
+        private val CHINESE_ROM_MARKERS = setOf(
+            "miui",
+            "hyperos",
+            "coloros",
+            "originos",
+            "funtouch",
+            "harmony",
+            "emui"
+        )
     }
 }

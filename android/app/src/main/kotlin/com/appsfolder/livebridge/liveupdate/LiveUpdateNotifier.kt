@@ -32,6 +32,18 @@ object LiveUpdateNotifier {
     private const val OTP_REPEAT_SUPPRESS_MS = 60_000L
     private const val OTP_AUTOCOPY_COPIED_SHOW_DELAY_MS = 1_000L
     private const val OTP_AUTOCOPY_COPIED_SHOW_DURATION_MS = 1_500L
+    private val BLOCKED_SOURCE_PACKAGES = setOf(
+        "ru.dublgis.dgismobile"
+    )
+    private val KNOWN_NAVIGATION_PACKAGES = setOf(
+        "ru.yandex.yandexmaps",
+        "com.google.android.apps.maps",
+        "com.waze"
+    )
+    private val NAVIGATION_DISTANCE_PATTERN = Regex(
+        "(?<!\\d)\\d{1,4}(?:[\\s.,]\\d{1,2})?\\s*(?:км|km|м|m|mi|ft|миль|фут)\\b",
+        setOf(RegexOption.IGNORE_CASE)
+    )
 
     private val OTP_CODE_LENGTH = 4..8
     private val progressColor = Color.valueOf(15f / 255f, 118f / 255f, 110f / 255f, 1f).toArgb()
@@ -128,7 +140,12 @@ object LiveUpdateNotifier {
             }
 
             val smartMatch = if (!hasNativeProgress && otpMatch == null && prefs.getSmartStatusDetectionEnabled()) {
-                detectSmartStage(sbn.packageName, source, parserDictionary)
+                detectSmartStage(
+                    packageName = sbn.packageName,
+                    source = source,
+                    parserDictionary = parserDictionary,
+                    navigationEnabled = prefs.getSmartNavigationEnabled()
+                )
             } else {
                 null
             }
@@ -252,7 +269,11 @@ object LiveUpdateNotifier {
                             AggregateState(smartMatch.stageValue, smartMatch.maxStage)
                         }
                         state.activeSbnKeys.add(sbn.key)
-                        state.maxStageSeen = maxOf(state.maxStageSeen, smartMatch.stageValue)
+                        state.maxStageSeen = if (smartMatch.keepHighestStage) {
+                            maxOf(state.maxStageSeen, smartMatch.stageValue)
+                        } else {
+                            smartMatch.stageValue
+                        }
                         sbnToAggregateKey[sbn.key] = smartMatch.aggregateKey
 
                         SmartRouteState(
@@ -263,12 +284,26 @@ object LiveUpdateNotifier {
                         )
                     }
                     routeState.staleAggregateIds.forEach(manager::cancel)
-                    val smartStatusText = smartShortStatusText(
-                        context = context,
-                        ruleId = smartRuleIdFromAggregateKey(smartMatch.aggregateKey),
-                        stageValue = routeState.stageValue,
-                        parserDictionary = parserDictionary
-                    ) ?: routeState.compactOrderCode
+                    val smartRuleId = smartRuleIdFromAggregateKey(smartMatch.aggregateKey)
+                    val smartStatusText =
+                        if (smartRuleId == "navigation") {
+                            extractNavigationDistanceText(
+                                notification = source,
+                                fallbackTitle = sbn.packageName
+                            ) ?: smartShortStatusText(
+                                context = context,
+                                ruleId = smartRuleId,
+                                stageValue = routeState.stageValue,
+                                parserDictionary = parserDictionary
+                            )
+                        } else {
+                            smartShortStatusText(
+                                context = context,
+                                ruleId = smartRuleId,
+                                stageValue = routeState.stageValue,
+                                parserDictionary = parserDictionary
+                            )
+                        } ?: routeState.compactOrderCode
 
                     val notification = buildMirroredNotification(
                         context = context,
@@ -277,6 +312,7 @@ object LiveUpdateNotifier {
                         progressOverride = ProgressOverride(routeState.stageValue, routeState.stageMax),
                         otpOverride = null,
                         smartShortTextOverride = smartStatusText,
+                        smartRuleId = smartRuleId,
                         requestPromoted = true
                     )
                     notifyWithPromotionFallback(
@@ -288,7 +324,8 @@ object LiveUpdateNotifier {
                         appPresentationOverride = appPresentationOverride,
                         progressOverride = ProgressOverride(routeState.stageValue, routeState.stageMax),
                         otpOverride = null,
-                        smartShortTextOverride = smartStatusText
+                        smartShortTextOverride = smartStatusText,
+                        smartRuleId = smartRuleId
                     )
                     true
                 }
@@ -364,6 +401,10 @@ object LiveUpdateNotifier {
             return false
         }
 
+        if (BLOCKED_SOURCE_PACKAGES.contains(sbn.packageName.lowercase(Locale.ROOT))) {
+            return false
+        }
+
         return prefs.isPackageAllowed(sbn.packageName)
     }
 
@@ -374,16 +415,27 @@ object LiveUpdateNotifier {
         progressOverride: ProgressOverride?,
         otpOverride: OtpMatch?,
         smartShortTextOverride: String?,
+        smartRuleId: String? = null,
         requestPromoted: Boolean,
         otpShortTextOverride: String? = null
     ): Notification {
         val source = sbn.notification
         val sourceSmallIcon = resolveSourceSmallIcon(context, sbn)
         val appSmallIcon = resolveAppSmallIcon(context, sbn.packageName)
+        val shouldTryNavigationArrowIcon =
+            appPresentationOverride.iconSource == NotificationIconSource.NOTIFICATION &&
+                    (smartRuleId == "navigation" || isLikelyNavigationPackage(sbn.packageName))
+        val navigationArrowIcon =
+            if (shouldTryNavigationArrowIcon) {
+                resolveRemoteDrawableIcon(context, sbn)
+            } else {
+                null
+            }
 
         val appName = resolveAppName(context, sbn.packageName)
-        val title = extractTitle(source, appName)
-        val text = extractText(source)
+        val allowRemoteViewTextFallback = shouldTryNavigationArrowIcon
+        val title = extractTitle(source, appName, allowRemoteViewTextFallback)
+        val text = extractText(source, allowRemoteViewTextFallback)
         val displayTitle = when (appPresentationOverride.compactTextSource) {
             CompactTextSource.TEXT -> text.ifBlank { title }
             CompactTextSource.TITLE -> title
@@ -421,7 +473,7 @@ object LiveUpdateNotifier {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
 
         val preferredSmallIcon = when (appPresentationOverride.iconSource) {
-            NotificationIconSource.NOTIFICATION -> sourceSmallIcon ?: appSmallIcon
+            NotificationIconSource.NOTIFICATION -> navigationArrowIcon ?: sourceSmallIcon ?: appSmallIcon
             NotificationIconSource.APP -> appSmallIcon ?: sourceSmallIcon
         }
         applySmallIcon(context, builder, preferredSmallIcon)
@@ -490,6 +542,7 @@ object LiveUpdateNotifier {
         progressOverride: ProgressOverride?,
         otpOverride: OtpMatch?,
         smartShortTextOverride: String?,
+        smartRuleId: String? = null,
         otpShortTextOverride: String? = null
     ) {
         try {
@@ -502,6 +555,7 @@ object LiveUpdateNotifier {
                 progressOverride = progressOverride,
                 otpOverride = otpOverride,
                 smartShortTextOverride = smartShortTextOverride,
+                smartRuleId = smartRuleId,
                 requestPromoted = false,
                 otpShortTextOverride = otpShortTextOverride
             )
@@ -512,14 +566,20 @@ object LiveUpdateNotifier {
     private fun detectSmartStage(
         packageName: String,
         source: Notification,
-        parserDictionary: LiveParserDictionary
+        parserDictionary: LiveParserDictionary,
+        navigationEnabled: Boolean
     ): SmartStageMatch? {
-        val title = extractTitle(source, packageName)
-        val text = extractText(source)
-        val combinedText = "$title $text".lowercase(Locale.ROOT)
+        val combinedText = collectNotificationText(
+            notification = source,
+            fallbackTitle = packageName,
+            includeRemoteViewTexts = isLikelyNavigationPackage(packageName)
+        ).lowercase(Locale.ROOT)
         val packageLower = packageName.lowercase(Locale.ROOT)
 
         for (rule in parserDictionary.smartRules) {
+            if (rule.id == "navigation" && !navigationEnabled) {
+                continue
+            }
             if (!rule.isRelevant(packageLower, combinedText)) {
                 continue
             }
@@ -528,7 +588,11 @@ object LiveUpdateNotifier {
             }
 
             val matchedSignal = rule.signals.firstOrNull { it.pattern.containsMatchIn(combinedText) } ?: continue
-            val entityToken = extractEntityToken(combinedText, parserDictionary)
+            val entityToken = if (rule.id == "navigation") {
+                "route"
+            } else {
+                extractEntityToken(combinedText, parserDictionary)
+            }
             val compactOrderCode = if (rule.id == "food") {
                 extractCompactOrderCode(entityToken)
             } else {
@@ -539,7 +603,8 @@ object LiveUpdateNotifier {
                 aggregateKey = "$packageLower:${rule.id}:$entityToken",
                 stageValue = matchedSignal.stage,
                 maxStage = rule.maxStage,
-                compactOrderCode = compactOrderCode
+                compactOrderCode = compactOrderCode,
+                keepHighestStage = rule.id != "navigation"
             )
         }
 
@@ -551,7 +616,11 @@ object LiveUpdateNotifier {
         source: Notification,
         parserDictionary: LiveParserDictionary
     ): OtpMatch? {
-        val combinedText = collectNotificationText(source, packageName)
+        val combinedText = collectNotificationText(
+            notification = source,
+            fallbackTitle = packageName,
+            includeRemoteViewTexts = false
+        )
         if (combinedText.isBlank()) {
             return null
         }
@@ -657,6 +726,19 @@ object LiveUpdateNotifier {
             stageValue = stageValue,
             isRussianLocale = isRussianLocale(context)
         )
+    }
+
+    private fun extractNavigationDistanceText(notification: Notification, fallbackTitle: String): String? {
+        val combinedText = collectNotificationText(
+            notification = notification,
+            fallbackTitle = fallbackTitle,
+            includeRemoteViewTexts = true
+        )
+        val match = NAVIGATION_DISTANCE_PATTERN.find(combinedText) ?: return null
+        return match.value
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .ifBlank { null }
     }
 
     private fun isRussianLocale(context: Context): Boolean {
@@ -871,6 +953,213 @@ object LiveUpdateNotifier {
         }
     }
 
+    private fun resolveRemoteDrawableIcon(context: Context, sbn: StatusBarNotification): IconCompat? {
+        val packageContext = try {
+            context.createPackageContext(sbn.packageName, 0)
+        } catch (_: Exception) {
+            return null
+        }
+
+        val resources = packageContext.resources
+        val source = sbn.notification
+        val drawableResId =
+            extractFirstRemoteDrawableResId(source.contentView, resources)
+                ?: extractFirstRemoteDrawableResId(source.bigContentView, resources)
+                ?: extractFirstRemoteDrawableResId(source.headsUpContentView, resources)
+                ?: return null
+
+        return try {
+            IconCompat.createWithResource(resources, sbn.packageName, drawableResId)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun extractRemoteViewTexts(notification: Notification): List<String> {
+        val values = linkedSetOf<String>()
+        val remoteViews = listOfNotNull(
+            notification.contentView,
+            notification.bigContentView,
+            notification.headsUpContentView
+        )
+
+        for (rv in remoteViews) {
+            val actions = getRemoteViewActions(rv)
+            for (action in actions) {
+                val fields = collectAllDeclaredFields(action.javaClass)
+                val methodName = fields.firstNotNullOfOrNull { field ->
+                    val normalized = field.name.removePrefix("m").lowercase(Locale.ROOT)
+                    if (normalized != "methodname") {
+                        null
+                    } else {
+                        runCatching {
+                            field.isAccessible = true
+                            field.get(action) as? String
+                        }.getOrNull()
+                    }
+                }?.lowercase(Locale.ROOT).orEmpty()
+                val likelyTextAction =
+                    methodName.contains("settext") || methodName.contains("setcharsequence")
+
+                for (field in fields) {
+                    val value = runCatching {
+                        field.isAccessible = true
+                        field.get(action)
+                    }.getOrNull()
+                    when (value) {
+                        is CharSequence -> {
+                            val normalized = value.toString().trim()
+                            if (normalized.isNotEmpty()) {
+                                if (likelyTextAction || field.name.contains("text", ignoreCase = true)) {
+                                    values.add(normalized)
+                                }
+                            }
+                        }
+
+                        is Array<*> -> {
+                            value.filterIsInstance<CharSequence>()
+                                .map { it.toString().trim() }
+                                .filter { it.isNotEmpty() }
+                                .forEach(values::add)
+                        }
+                    }
+                }
+            }
+        }
+        return values.toList()
+    }
+
+    private fun extractFirstRemoteDrawableResId(
+        rv: android.widget.RemoteViews?,
+        resources: android.content.res.Resources
+    ): Int? {
+        val actions = getRemoteViewActions(rv)
+        if (actions.isEmpty()) {
+            return null
+        }
+
+        for (action in actions) {
+            val fields = collectAllDeclaredFields(action.javaClass)
+            val actionClassName = action.javaClass.name.lowercase(Locale.ROOT)
+            var methodName = ""
+            val candidates = mutableListOf<Pair<String, Int>>()
+
+            for (field in fields) {
+                val value = runCatching {
+                    field.isAccessible = true
+                    field.get(action)
+                }.getOrNull() ?: continue
+                val normalizedName = field.name.removePrefix("m").lowercase(Locale.ROOT)
+                if (normalizedName == "methodname" && value is String) {
+                    methodName = value.lowercase(Locale.ROOT)
+                }
+                candidates.addAll(extractDrawableResIdCandidates(value, normalizedName))
+            }
+
+            val looksLikeImageAction =
+                methodName.contains("icon") ||
+                        methodName.contains("image") ||
+                        methodName.contains("drawable") ||
+                        actionClassName.contains("icon") ||
+                        actionClassName.contains("image") ||
+                        actionClassName.contains("drawable")
+            if (!looksLikeImageAction) {
+                continue
+            }
+
+            for ((fieldName, resId) in candidates) {
+                val isResourceField =
+                    fieldName.contains("res") ||
+                            fieldName.contains("icon") ||
+                            fieldName.contains("drawable") ||
+                            fieldName.contains("value")
+                if (!isResourceField) {
+                    continue
+                }
+                if (isDrawableResource(resources, resId)) {
+                    return resId
+                }
+            }
+        }
+        return null
+    }
+
+    private fun extractDrawableResIdCandidates(value: Any, fieldName: String): List<Pair<String, Int>> {
+        val candidates = mutableListOf<Pair<String, Int>>()
+        when (value) {
+            is Int -> {
+                if (value > 0) {
+                    candidates += fieldName to value
+                }
+            }
+
+            is IntArray -> {
+                value.filter { it > 0 }.forEachIndexed { index, item ->
+                    candidates += "$fieldName:$index" to item
+                }
+            }
+
+            is Array<*> -> {
+                value.forEachIndexed { index, item ->
+                    if (item != null) {
+                        candidates += extractDrawableResIdCandidates(item, "$fieldName:$index")
+                    }
+                }
+            }
+
+            is List<*> -> {
+                value.forEachIndexed { index, item ->
+                    if (item != null) {
+                        candidates += extractDrawableResIdCandidates(item, "$fieldName:$index")
+                    }
+                }
+            }
+
+            else -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                    value is android.graphics.drawable.Icon &&
+                    value.type == android.graphics.drawable.Icon.TYPE_RESOURCE
+                ) {
+                    val resId = value.resId
+                    if (resId > 0) {
+                        candidates += "$fieldName:icon" to resId
+                    }
+                }
+            }
+        }
+        return candidates
+    }
+
+    private fun getRemoteViewActions(rv: android.widget.RemoteViews?): List<Any> {
+        rv ?: return emptyList()
+        return try {
+            val actionsField = rv.javaClass.getDeclaredField("mActions")
+            actionsField.isAccessible = true
+            (actionsField.get(rv) as? List<*>)?.filterNotNull() ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun collectAllDeclaredFields(clazz: Class<*>): List<java.lang.reflect.Field> {
+        val fields = mutableListOf<java.lang.reflect.Field>()
+        var current: Class<*>? = clazz
+        while (current != null && current != Any::class.java) {
+            fields.addAll(current.declaredFields)
+            current = current.superclass
+        }
+        return fields
+    }
+
+    private fun isDrawableResource(resources: android.content.res.Resources, resId: Int): Boolean {
+        return try {
+            val typeName = resources.getResourceTypeName(resId)
+            typeName == "drawable" || typeName == "mipmap"
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private fun buildCopyOtpAction(
         context: Context,
         sbn: StatusBarNotification,
@@ -951,22 +1240,46 @@ object LiveUpdateNotifier {
         return max > 0 || indeterminate
     }
 
-    private fun extractTitle(notification: Notification, fallbackName: String): String {
+    private fun extractTitle(
+        notification: Notification,
+        fallbackName: String,
+        allowRemoteViewFallback: Boolean
+    ): String {
         val extras = notification.extras
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)
             ?: extras.getCharSequence(Notification.EXTRA_TITLE_BIG)
-        return title?.toString()?.takeIf { it.isNotBlank() } ?: fallbackName
+        val normalizedTitle = title?.toString()?.takeIf { it.isNotBlank() }
+        if (normalizedTitle != null) {
+            return normalizedTitle
+        }
+        if (!allowRemoteViewFallback) {
+            return fallbackName
+        }
+        val remoteTitle = extractRemoteViewTexts(notification).firstOrNull()
+        return remoteTitle ?: fallbackName
     }
 
-    private fun extractText(notification: Notification): String {
+    private fun extractText(notification: Notification, allowRemoteViewFallback: Boolean): String {
         val extras = notification.extras
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)
             ?: extras.getCharSequence(Notification.EXTRA_BIG_TEXT)
             ?: extras.getCharSequence(Notification.EXTRA_SUB_TEXT)
-        return text?.toString()?.takeIf { it.isNotBlank() } ?: "Live update in progress"
+        val normalized = text?.toString()?.takeIf { it.isNotBlank() }
+        if (normalized != null) {
+            return normalized
+        }
+        if (!allowRemoteViewFallback) {
+            return "Live update in progress"
+        }
+        val remoteText = extractRemoteViewTexts(notification).firstOrNull()
+        return remoteText ?: "Live update in progress"
     }
 
-    private fun collectNotificationText(notification: Notification, fallbackTitle: String): String {
+    private fun collectNotificationText(
+        notification: Notification,
+        fallbackTitle: String,
+        includeRemoteViewTexts: Boolean
+    ): String {
         val extras = notification.extras
         val parts = mutableListOf<String>()
 
@@ -978,8 +1291,17 @@ object LiveUpdateNotifier {
         }
 
         add(extras.getCharSequence(Notification.EXTRA_TITLE))
+        add(extras.getCharSequence(Notification.EXTRA_TITLE_BIG))
         add(extras.getCharSequence(Notification.EXTRA_TEXT))
+        add(extras.getCharSequence(Notification.EXTRA_BIG_TEXT))
         add(extras.getCharSequence(Notification.EXTRA_SUB_TEXT))
+        add(extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT))
+        add(extras.getCharSequence(Notification.EXTRA_INFO_TEXT))
+        extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+            ?.forEach(::add)
+        if (includeRemoteViewTexts) {
+            extractRemoteViewTexts(notification).forEach { add(it) }
+        }
 
         if (parts.isEmpty()) {
             parts.add(fallbackTitle)
@@ -999,6 +1321,16 @@ object LiveUpdateNotifier {
         } catch (_: PackageManager.NameNotFoundException) {
             packageName
         }
+    }
+
+    private fun isLikelyNavigationPackage(packageName: String): Boolean {
+        val packageLower = packageName.lowercase(Locale.ROOT)
+        if (KNOWN_NAVIGATION_PACKAGES.contains(packageLower)) {
+            return true
+        }
+        return packageLower.contains("navigation") ||
+                packageLower.contains("navigator") ||
+                packageLower.contains(".maps")
     }
 
     private fun mirrorIdForKey(key: String): Int {
@@ -1112,7 +1444,8 @@ object LiveUpdateNotifier {
         val aggregateKey: String,
         val stageValue: Int,
         val maxStage: Int,
-        val compactOrderCode: String?
+        val compactOrderCode: String?,
+        val keepHighestStage: Boolean
     )
 
     private data class OtpMatch(

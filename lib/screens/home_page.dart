@@ -33,8 +33,10 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
   bool _notificationsGranted = false;
   bool _canPostPromoted = false;
   bool _converterEnabled = true;
+  bool _keepAliveForegroundEnabled = false;
   bool _onlyWithProgress = true;
   bool _smartDetectionEnabled = true;
+  bool _smartNavigationEnabled = true;
   bool _otpDetectionEnabled = true;
   bool _otpAutoCopyEnabled = false;
   bool _hasCustomParserDictionary = false;
@@ -141,10 +143,14 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
           await LiveBridgePlatform.canPostPromotedNotifications();
       final bool converterEnabled =
           await LiveBridgePlatform.getConverterEnabled();
+      final bool keepAliveForegroundEnabled =
+          await LiveBridgePlatform.getKeepAliveForegroundEnabled();
       final bool onlyWithProgress =
           await LiveBridgePlatform.getOnlyWithProgress();
       final bool smartDetectionEnabled =
           await LiveBridgePlatform.getSmartStatusDetectionEnabled();
+      final bool smartNavigationEnabled =
+          await LiveBridgePlatform.getSmartNavigationEnabled();
       final bool otpDetectionEnabled =
           await LiveBridgePlatform.getOtpDetectionEnabled();
       final bool otpAutoCopyEnabled =
@@ -204,8 +210,10 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
         _notificationsGranted = notificationsGranted;
         _canPostPromoted = canPostPromoted;
         _converterEnabled = converterEnabled;
+        _keepAliveForegroundEnabled = keepAliveForegroundEnabled;
         _onlyWithProgress = onlyWithProgress;
         _smartDetectionEnabled = smartDetectionEnabled;
+        _smartNavigationEnabled = smartNavigationEnabled;
         _otpDetectionEnabled = otpDetectionEnabled;
         _otpAutoCopyEnabled = otpAutoCopyEnabled;
         _hasCustomParserDictionary = hasCustomParserDictionary;
@@ -261,6 +269,12 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     await LiveBridgePlatform.setConverterEnabled(value);
   }
 
+  Future<void> _setKeepAliveForeground(bool value) async {
+    HapticFeedback.selectionClick();
+    setState(() => _keepAliveForegroundEnabled = value);
+    await LiveBridgePlatform.setKeepAliveForegroundEnabled(value);
+  }
+
   Future<void> _showMasterBlockedFeedback() async {
     if (_canToggleMaster) return;
 
@@ -282,6 +296,12 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     HapticFeedback.selectionClick();
     setState(() => _smartDetectionEnabled = value);
     await LiveBridgePlatform.setSmartStatusDetectionEnabled(value);
+  }
+
+  Future<void> _setSmartNavigation(bool value) async {
+    HapticFeedback.selectionClick();
+    setState(() => _smartNavigationEnabled = value);
+    await LiveBridgePlatform.setSmartNavigationEnabled(value);
   }
 
   Future<void> _setOtpDetection(bool value) async {
@@ -823,6 +843,26 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
       icon: Icons.settings_rounded,
       child: Column(
         children: <Widget>[
+          SwitchListTile.adaptive(
+            value: _keepAliveForegroundEnabled,
+            onChanged: _setKeepAliveForeground,
+            title: Text(
+              s.keepAliveForegroundTitle,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              _effectiveConverterEnabled
+                  ? s.keepAliveForegroundSubtitle
+                  : s.keepAliveForegroundInactiveSubtitle,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 13,
+              ),
+            ),
+            contentPadding: EdgeInsets.zero,
+            activeThumbColor: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -1172,22 +1212,46 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
       sectionId: 'smart',
       title: s.smartCardTitle,
       icon: Icons.auto_awesome_rounded,
-      child: SwitchListTile.adaptive(
-        value: _smartDetectionEnabled,
-        onChanged: _setSmartDetection,
-        title: Text(
-          s.smartDetectionTitle,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          s.smartDetectionSubtitle,
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontSize: 13,
+      child: Column(
+        children: <Widget>[
+          SwitchListTile.adaptive(
+            value: _smartDetectionEnabled,
+            onChanged: _setSmartDetection,
+            title: Text(
+              s.smartDetectionTitle,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              s.smartDetectionSubtitle,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 13,
+              ),
+            ),
+            contentPadding: EdgeInsets.zero,
+            activeThumbColor: Theme.of(context).colorScheme.primary,
           ),
-        ),
-        contentPadding: EdgeInsets.zero,
-        activeThumbColor: Theme.of(context).colorScheme.primary,
+          const SizedBox(height: 8),
+          SwitchListTile.adaptive(
+            value: _smartNavigationEnabled,
+            onChanged: _smartDetectionEnabled ? _setSmartNavigation : null,
+            title: Text(
+              s.smartNavigationTitle,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              _smartDetectionEnabled
+                  ? s.smartNavigationSubtitle
+                  : s.smartNavigationDisabledSubtitle,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 13,
+              ),
+            ),
+            contentPadding: EdgeInsets.zero,
+            activeThumbColor: Theme.of(context).colorScheme.primary,
+          ),
+        ],
       ),
     );
   }

@@ -54,10 +54,18 @@ class LiveBridgePlatform {
   static Future<bool> getConverterEnabled() => _askBool('getConverterEnabled');
   static Future<bool> setConverterEnabled(bool value) =>
       _askBool('setConverterEnabled', {'value': value});
+  static Future<bool> getKeepAliveForegroundEnabled() =>
+      _askBool('getKeepAliveForegroundEnabled');
+  static Future<bool> setKeepAliveForegroundEnabled(bool value) =>
+      _askBool('setKeepAliveForegroundEnabled', {'value': value});
   static Future<bool> getSmartStatusDetectionEnabled() =>
       _askBool('getSmartStatusDetectionEnabled');
   static Future<bool> setSmartStatusDetectionEnabled(bool value) =>
       _askBool('setSmartStatusDetectionEnabled', {'value': value});
+  static Future<bool> getSmartNavigationEnabled() =>
+      _askBool('getSmartNavigationEnabled');
+  static Future<bool> setSmartNavigationEnabled(bool value) =>
+      _askBool('setSmartNavigationEnabled', {'value': value});
   static Future<bool> getOtpDetectionEnabled() =>
       _askBool('getOtpDetectionEnabled');
   static Future<bool> setOtpDetectionEnabled(bool value) =>

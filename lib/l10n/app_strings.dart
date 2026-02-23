@@ -94,6 +94,14 @@ class AppStrings {
   String get grant => isRu ? 'Выдать' : 'Grant';
   String get manage => isRu ? 'Управлять' : 'Manage';
   String get settingsTitle => isRu ? 'Настройки' : 'Settings';
+  String get keepAliveForegroundTitle =>
+      isRu ? 'Альтернативный фоновый режим' : 'Alt background mode';
+  String get keepAliveForegroundSubtitle => isRu
+      ? 'Держит foreground-сервис для более стабильной работы в фоне.'
+      : 'Runs a persistent foreground service for better background stability.';
+  String get keepAliveForegroundInactiveSubtitle => isRu
+      ? 'Включите LiveBridge, чтобы режим начал работать.'
+      : 'Enable the LiveBridge for this mode to take effect.';
   String get appPresentationSettings =>
       isRu ? 'Поведение приложений' : 'Per-app behavior';
   String get appPresentationScreenTitle =>
@@ -192,14 +200,22 @@ class AppStrings {
       ? 'Преобразование текстовых этапов в один Live-прогресс.'
       : 'Converts text-only stage updates into one Live progress flow.';
   String get smartDetectionSubtitle => isRu
-      ? 'Преобразует текстовые статусы в единый Live-прогресс.'
-      : 'Converts text-only order/taxi status notifications into a single Live.';
+      ? 'Преобразует текстовые статусы еды, такси и навигации в единый Live-прогресс.'
+      : 'Converts text-only food/taxi/navigation status notifications into a single Live.';
+  String get smartNavigationTitle =>
+      isRu ? 'Навигация (карты)' : 'Navigation (maps)';
+  String get smartNavigationSubtitle => isRu
+      ? 'Распознавание уведомлений навигации.'
+      : 'Navigation notification detection.';
+  String get smartNavigationDisabledSubtitle => isRu
+      ? 'Сначала включите умное распознавание.'
+      : 'Enable smart status detection first.';
   String get smartDetectionDisabledSubtitle => isRu
       ? 'Отключено в режиме "Только прогресс".'
       : 'Disabled while "Only progress" mode is enabled.';
   String get conflictingModesHint => isRu
       ? 'Чтобы работали текстовые статусы, отключите режим "Только прогресс".'
-      : 'Turn off "Only progress" mode to enable food/taxi text status recognition.';
+      : 'Turn off "Only progress" mode to enable food/taxi/navigation text status recognition.';
   String get onlyProgressTitle =>
       isRu ? 'Только нативный прогресс' : 'Only native progress';
   String get onlyProgressSubtitle => isRu

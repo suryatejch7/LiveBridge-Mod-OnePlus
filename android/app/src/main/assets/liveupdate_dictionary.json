@@ -84,6 +84,69 @@
           "pattern": "(поиск[^\\n]*водител|ищем[^\\n]*водител|searching for (a )?driver|finding driver)"
         }
       ]
+    },
+    {
+      "id": "navigation",
+      "max_stage": 4,
+      "package_hints": [
+        "ru.yandex.yandexmaps",
+        "google.android.apps.maps",
+        "waze",
+        "here",
+        "tomtom",
+        "maps",
+        "map",
+        "navigator",
+        "navigation",
+        "navi"
+      ],
+      "text_triggers": [
+        "маршрут",
+        "навигац",
+        "поверните",
+        "сверните",
+        "держитесь",
+        "развернитесь",
+        "пройдите",
+        "съезд",
+        "круговом",
+        "через",
+        "пункт назначения",
+        "продолжайте движение",
+        "turn",
+        "keep",
+        "continue",
+        "head ",
+        "take the",
+        "exit",
+        "merge",
+        "u-turn",
+        "roundabout",
+        "destination",
+        "arrive"
+      ],
+      "exclude_patterns": [
+        "(с дн[её]м рождения|happy birthday|birthday)",
+        "(дарим\\s+скидк|скидк[\\p{L}]*\\s*\\d+%|\\d+%\\s*(скидк|off)|акци[яи]|промокод|promo\\s*code|coupon|cash\\s*back|кэшб[еэ]к)"
+      ],
+      "signals": [
+        {
+          "stage": 4,
+          "pattern": "(вы прибыли|пункт назначения достигнут|маршрут заверш[её]н|завершить маршрут|finish the route|arrived|destination reached|you'?ve arrived)"
+        },
+        {
+          "stage": 3,
+          "pattern": "(пункт назначения[^\\n]*(справа|слева)|destination (is )?on (your )?(right|left)|almost there|почти на месте|до пункта назначения)"
+        },
+        {
+          "stage": 2,
+          "pattern": "(через\\s*\\d+[\\d\\s.,]*(м|км|m|km|ft|mi)|\\b\\d+\\s*(m|km|ft|mi)\\b|поверните|сверните|держитесь|развернитесь|пройдите|двигайтесь|продолжайте движение|возьмите съезд|выйдите|turn (left|right)|keep (left|right)|continue|head\\s|take\\s+the|exit|merge|roundabout|u-?turn)"
+        },
+        {
+          "stage": 1,
+          "pattern": "(маршрут построен|маршрут начат|navigation started|starting route|follow the route|route started)"
+        }
+      ]
     }
   ],
   "otp_strong_triggers": [
@@ -151,6 +214,20 @@
         "2": "Arriving",
         "3": "On trip",
         "4": "Done"
+      }
+    },
+    "navigation": {
+      "ru": {
+        "1": "Маршрут",
+        "2": "Навигация",
+        "3": "Почти на месте",
+        "4": "Прибытие"
+      },
+      "en": {
+        "1": "Route",
+        "2": "Navigation",
+        "3": "Almost there",
+        "4": "Arrived"
       }
     }
   }

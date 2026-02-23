@@ -49,12 +49,32 @@ class ConverterPrefs(context: Context) {
         prefs.edit().putBoolean(KEY_CONVERTER_ENABLED, value).apply()
     }
 
+    fun getKeepAliveForegroundEnabled(): Boolean {
+        return prefs.getBoolean(KEY_KEEP_ALIVE_FOREGROUND_ENABLED, false)
+    }
+
+    fun hasKeepAliveForegroundPreference(): Boolean {
+        return prefs.contains(KEY_KEEP_ALIVE_FOREGROUND_ENABLED)
+    }
+
+    fun setKeepAliveForegroundEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_KEEP_ALIVE_FOREGROUND_ENABLED, value).apply()
+    }
+
     fun getSmartStatusDetectionEnabled(): Boolean {
         return prefs.getBoolean(KEY_SMART_STATUS_ENABLED, true)
     }
 
     fun setSmartStatusDetectionEnabled(value: Boolean) {
         prefs.edit().putBoolean(KEY_SMART_STATUS_ENABLED, value).apply()
+    }
+
+    fun getSmartNavigationEnabled(): Boolean {
+        return prefs.getBoolean(KEY_SMART_NAVIGATION_ENABLED, true)
+    }
+
+    fun setSmartNavigationEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_SMART_NAVIGATION_ENABLED, value).apply()
     }
 
     fun getOtpDetectionEnabled(): Boolean {
@@ -226,7 +246,9 @@ class ConverterPrefs(context: Context) {
         private const val KEY_PACKAGE_MODE = "package_mode"
         private const val KEY_ONLY_WITH_PROGRESS = "only_with_progress"
         private const val KEY_CONVERTER_ENABLED = "converter_enabled"
+        private const val KEY_KEEP_ALIVE_FOREGROUND_ENABLED = "keep_alive_foreground_enabled"
         private const val KEY_SMART_STATUS_ENABLED = "smart_status_enabled"
+        private const val KEY_SMART_NAVIGATION_ENABLED = "smart_navigation_enabled"
         private const val KEY_OTP_DETECTION_ENABLED = "otp_detection_enabled"
         private const val KEY_OTP_AUTO_COPY_ENABLED = "otp_auto_copy_enabled"
         private const val KEY_OTP_PACKAGE_RULES = "otp_package_rules"

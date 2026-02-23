@@ -61,6 +61,14 @@ class ConverterPrefs(context: Context) {
         prefs.edit().putBoolean(KEY_KEEP_ALIVE_FOREGROUND_ENABLED, value).apply()
     }
 
+    fun getAospCuttingEnabled(): Boolean {
+        return prefs.getBoolean(KEY_AOSP_CUTTING_ENABLED, false)
+    }
+
+    fun setAospCuttingEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_AOSP_CUTTING_ENABLED, value).apply()
+    }
+
     fun getSmartStatusDetectionEnabled(): Boolean {
         return prefs.getBoolean(KEY_SMART_STATUS_ENABLED, true)
     }
@@ -247,6 +255,7 @@ class ConverterPrefs(context: Context) {
         private const val KEY_ONLY_WITH_PROGRESS = "only_with_progress"
         private const val KEY_CONVERTER_ENABLED = "converter_enabled"
         private const val KEY_KEEP_ALIVE_FOREGROUND_ENABLED = "keep_alive_foreground_enabled"
+        private const val KEY_AOSP_CUTTING_ENABLED = "aosp_cutting_enabled"
         private const val KEY_SMART_STATUS_ENABLED = "smart_status_enabled"
         private const val KEY_SMART_NAVIGATION_ENABLED = "smart_navigation_enabled"
         private const val KEY_OTP_DETECTION_ENABLED = "otp_detection_enabled"

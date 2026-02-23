@@ -102,6 +102,10 @@ class AppStrings {
   String get keepAliveForegroundInactiveSubtitle => isRu
       ? 'Включите LiveBridge, чтобы режим начал работать.'
       : 'Enable the LiveBridge for this mode to take effect.';
+  String get aospCuttingTitle => isRu ? 'Обрезка AOSP' : 'AOSP cutting';
+  String get aospCuttingSubtitle => isRu
+      ? 'Обрезать информацию в острове до 7 символов для красивого отображения в AOSP-прошивках.'
+      : 'Trim island text to 7 characters for cleaner rendering on AOSP ROMs.';
   String get appPresentationSettings =>
       isRu ? 'Поведение приложений' : 'Per-app behavior';
   String get appPresentationScreenTitle =>

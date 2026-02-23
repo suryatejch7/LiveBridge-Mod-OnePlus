@@ -32,6 +32,7 @@ object LiveUpdateNotifier {
     private const val OTP_REPEAT_SUPPRESS_MS = 60_000L
     private const val OTP_AUTOCOPY_COPIED_SHOW_DELAY_MS = 1_000L
     private const val OTP_AUTOCOPY_COPIED_SHOW_DURATION_MS = 1_500L
+    private const val AOSP_ISLAND_TEXT_LIMIT = 7
     private val BLOCKED_SOURCE_PACKAGES = setOf(
         "ru.dublgis.dgismobile"
     )
@@ -449,6 +450,7 @@ object LiveUpdateNotifier {
         } else {
             text
         }
+        val aospCuttingEnabled = ConverterPrefs(context).getAospCuttingEnabled()
 
         val progressMax = progressOverride?.max ?: source.extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
         val progressValue = progressOverride?.value ?: source.extras.getInt(Notification.EXTRA_PROGRESS, 0)
@@ -517,16 +519,21 @@ object LiveUpdateNotifier {
                         .setProgress(percent)
                         .setStyledByProgress(true)
                 )
-                builder.setShortCriticalText(smartShortTextOverride ?: "$percent%")
+                builder.setShortCriticalText(
+                    limitIslandText(smartShortTextOverride ?: "$percent%", aospCuttingEnabled)
+                )
             }
         } else if (otpOverride != null) {
             builder.setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            builder.setShortCriticalText(otpShortTextOverride ?: otpOverride.code)
+            builder.setShortCriticalText(
+                limitIslandText(otpShortTextOverride ?: otpOverride.code, aospCuttingEnabled)
+            )
         } else {
             builder.setStyle(NotificationCompat.BigTextStyle().bigText(text))
         }
         if (smartShortTextOverride != null && !hasProgress) {
             builder.setContentText(smartShortTextOverride)
+            builder.setShortCriticalText(limitIslandText(smartShortTextOverride, aospCuttingEnabled))
         }
 
         return builder.build()
@@ -1336,6 +1343,14 @@ object LiveUpdateNotifier {
     private fun mirrorIdForKey(key: String): Int {
         val value = key.hashCode()
         return if (value == Int.MIN_VALUE) 0 else abs(value)
+    }
+
+    private fun limitIslandText(value: String?, enabled: Boolean): String {
+        val normalized = value.orEmpty()
+        if (!enabled) {
+            return normalized
+        }
+        return normalized.take(AOSP_ISLAND_TEXT_LIMIT)
     }
 
     private fun clearAggregateTrackingForSbnKeyLocked(sbnKey: String): List<Int> {

@@ -242,6 +242,12 @@ class MainActivity : FlutterActivity() {
                 res.success(true)
             }
 
+            "getAospCuttingEnabled" -> res.success(prefs.getAospCuttingEnabled())
+            "setAospCuttingEnabled" -> {
+                prefs.setAospCuttingEnabled(call.argument<Boolean>("value") ?: false)
+                res.success(true)
+            }
+
             "getSmartStatusDetectionEnabled" -> res.success(prefs.getSmartStatusDetectionEnabled())
             "setSmartStatusDetectionEnabled" -> {
                 prefs.setSmartStatusDetectionEnabled(call.argument<Boolean>("value") ?: true)

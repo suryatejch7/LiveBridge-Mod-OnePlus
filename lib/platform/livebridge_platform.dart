@@ -58,6 +58,10 @@ class LiveBridgePlatform {
       _askBool('getKeepAliveForegroundEnabled');
   static Future<bool> setKeepAliveForegroundEnabled(bool value) =>
       _askBool('setKeepAliveForegroundEnabled', {'value': value});
+  static Future<bool> getAospCuttingEnabled() =>
+      _askBool('getAospCuttingEnabled');
+  static Future<bool> setAospCuttingEnabled(bool value) =>
+      _askBool('setAospCuttingEnabled', {'value': value});
   static Future<bool> getSmartStatusDetectionEnabled() =>
       _askBool('getSmartStatusDetectionEnabled');
   static Future<bool> setSmartStatusDetectionEnabled(bool value) =>

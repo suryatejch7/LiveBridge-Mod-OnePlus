@@ -34,6 +34,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
   bool _canPostPromoted = false;
   bool _converterEnabled = true;
   bool _keepAliveForegroundEnabled = false;
+  bool _aospCuttingEnabled = false;
   bool _onlyWithProgress = true;
   bool _smartDetectionEnabled = true;
   bool _smartNavigationEnabled = true;
@@ -44,6 +45,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
   bool _showBackgroundWarning = false;
   bool _showSamsungDeveloperWarning = false;
   bool _hidePromotedAccess = false;
+  bool _isAospDevice = false;
   String _deviceLabelForWarning = '';
   final Set<String> _expandedSections = <String>{};
   bool _expandedSectionsLoaded = false;
@@ -145,6 +147,8 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
           await LiveBridgePlatform.getConverterEnabled();
       final bool keepAliveForegroundEnabled =
           await LiveBridgePlatform.getKeepAliveForegroundEnabled();
+      final bool aospCuttingEnabled =
+          await LiveBridgePlatform.getAospCuttingEnabled();
       final bool onlyWithProgress =
           await LiveBridgePlatform.getOnlyWithProgress();
       final bool smartDetectionEnabled =
@@ -211,6 +215,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
         _canPostPromoted = canPostPromoted;
         _converterEnabled = converterEnabled;
         _keepAliveForegroundEnabled = keepAliveForegroundEnabled;
+        _aospCuttingEnabled = aospCuttingEnabled;
         _onlyWithProgress = onlyWithProgress;
         _smartDetectionEnabled = smartDetectionEnabled;
         _smartNavigationEnabled = smartNavigationEnabled;
@@ -218,6 +223,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
         _otpAutoCopyEnabled = otpAutoCopyEnabled;
         _hasCustomParserDictionary = hasCustomParserDictionary;
         _hidePromotedAccess = deviceInfo.shouldHideLiveUpdatesPromotion;
+        _isAospDevice = deviceInfo.isAospDevice;
         _showBackgroundWarning =
             !deviceInfo.isPixel &&
             !deviceInfo.isSamsung &&
@@ -273,6 +279,12 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     HapticFeedback.selectionClick();
     setState(() => _keepAliveForegroundEnabled = value);
     await LiveBridgePlatform.setKeepAliveForegroundEnabled(value);
+  }
+
+  Future<void> _setAospCutting(bool value) async {
+    HapticFeedback.selectionClick();
+    setState(() => _aospCuttingEnabled = value);
+    await LiveBridgePlatform.setAospCuttingEnabled(value);
   }
 
   Future<void> _showMasterBlockedFeedback() async {
@@ -862,6 +874,26 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
             contentPadding: EdgeInsets.zero,
             activeThumbColor: Theme.of(context).colorScheme.primary,
           ),
+          if (_isAospDevice) ...<Widget>[
+            const SizedBox(height: 8),
+            SwitchListTile.adaptive(
+              value: _aospCuttingEnabled,
+              onChanged: _setAospCutting,
+              title: Text(
+                s.aospCuttingTitle,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                s.aospCuttingSubtitle,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 13,
+                ),
+              ),
+              contentPadding: EdgeInsets.zero,
+              activeThumbColor: Theme.of(context).colorScheme.primary,
+            ),
+          ],
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,

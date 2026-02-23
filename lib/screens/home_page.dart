@@ -197,6 +197,12 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
           await LiveBridgePlatform.getUpdateCachedLatestVersion();
       final String currentAppVersion =
           await LiveBridgePlatform.getAppVersionName();
+      final bool normalizedCachedUpdateAvailable =
+          updateCachedAvailable &&
+          _isReleaseNewer(
+            currentVersion: currentAppVersion,
+            latestVersion: updateCachedLatestVersion,
+          );
       final bool hasCustomParserDictionary =
           await LiveBridgePlatform.hasCustomParserDictionary();
       final bool backgroundWarningDismissed =
@@ -260,7 +266,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
         _otpDetectionEnabled = otpDetectionEnabled;
         _otpAutoCopyEnabled = otpAutoCopyEnabled;
         _updateChecksEnabled = updateChecksEnabled;
-        _updateAvailable = updateCachedAvailable;
+        _updateAvailable = normalizedCachedUpdateAvailable;
         _latestReleaseVersion = updateCachedLatestVersion;
         _currentAppVersion = currentAppVersion;
         _hasCustomParserDictionary = hasCustomParserDictionary;
@@ -279,6 +285,14 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
         _otpRulesController.text = otpPackageRules;
         _isLoading = false;
       });
+
+      if (normalizedCachedUpdateAvailable != updateCachedAvailable) {
+        unawaited(
+          LiveBridgePlatform.setUpdateCachedAvailable(
+            normalizedCachedUpdateAvailable,
+          ),
+        );
+      }
 
       if (showLoading) {
         unawaited(_checkForUpdatesIfNeeded());
@@ -494,23 +508,37 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
   }
 
   List<int> _extractVersionParts(String input) {
-    final String normalized = input.trim().toLowerCase().replaceFirst(
-      RegExp(r'^v'),
-      '',
-    );
+    final RegExpMatch? match = RegExp(
+      r'v?\d+(?:\.\d+){1,3}(?:\+\d+)?',
+      caseSensitive: false,
+    ).firstMatch(input.trim());
+    if (match == null) {
+      return const <int>[];
+    }
+
+    final String normalized = match
+        .group(0)!
+        .trim()
+        .toLowerCase()
+        .replaceFirst(RegExp(r'^v'), '');
     if (normalized.isEmpty) {
       return const <int>[];
     }
 
-    final List<String> tokens = normalized
-        .split(RegExp(r'[^0-9]+'))
-        .where((String item) => item.isNotEmpty)
+    final List<String> parts = normalized.split('+');
+    final String coreVersion = parts.first;
+    final List<int> versionParts = coreVersion
+        .split('.')
+        .map((String value) => int.tryParse(value) ?? 0)
         .toList();
-    if (tokens.isEmpty) {
+    if (versionParts.isEmpty) {
       return const <int>[];
     }
 
-    return tokens.map((String token) => int.tryParse(token) ?? 0).toList();
+    if (parts.length > 1) {
+      versionParts.add(int.tryParse(parts[1]) ?? 0);
+    }
+    return versionParts;
   }
 
   Future<void> _showMasterBlockedFeedback() async {

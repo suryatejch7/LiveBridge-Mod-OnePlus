@@ -30,23 +30,23 @@
       "signals": [
         {
           "stage": 4,
-          "pattern": "(доставлен|получен|delivered|completed|приятного аппетита|enjoy)"
+          "pattern": "(доставлен|доставлено|получен|получено|delivered|delivery completed|completed|приятного аппетита|enjoy)"
         },
         {
           "stage": 3,
-          "pattern": "(курьер[^\\n]*в пути|out for delivery|on the way|едет к вам)"
+          "pattern": "(курьер[^\\n]*в пути|out for delivery|on the way|едет к вам|доставля(?:ется|ем)|передан[^\\n]*курьеру|courier[^\\n]*(picked up|heading|on the way))"
         },
         {
           "stage": 2,
-          "pattern": "(собираем|упаковываем|почти готов|packed|almost ready|ready for pickup)"
+          "pattern": "(собираем|собран|упаковываем|упакован|почти готов|готов к выдаче|готов для выдачи|packed|almost ready|ready for pickup|ready)"
         },
         {
           "stage": 1,
-          "pattern": "(готовится|готовим|preparing|in kitchen|is being prepared|is being cooked|being cooked|cooking|cooked for you)"
+          "pattern": "(готовится|готовим|начали готовить|preparing|in kitchen|is being prepared|is being cooked|being cooked|cooking|cooked for you)"
         },
         {
           "stage": 0,
-          "pattern": "(заказ[^\\n]*(принят|создан)|order[^\\n]*(received|accepted|confirmed))"
+          "pattern": "(заказ[^\\n]*(принят|создан|оформлен|подтвержд[её]н|оплачен)|order[^\\n]*(received|accepted|confirmed|created|placed|paid)|оплат[аы][^\\n]*(прошла|подтверждена|успешна)|payment[^\\n]*(successful|confirmed|received))"
         }
       ]
     },
@@ -213,12 +213,16 @@
       "ru": {
         "0": "Оплачен",
         "1": "Готовится",
-        "2": "Готов"
+        "2": "Готов",
+        "3": "В пути",
+        "4": "Доставлен"
       },
       "en": {
         "0": "Paid",
         "1": "Cooking",
-        "2": "Ready"
+        "2": "Ready",
+        "3": "On the way",
+        "4": "Delivered"
       }
     },
     "taxi": {

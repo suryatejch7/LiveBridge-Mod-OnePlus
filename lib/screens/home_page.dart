@@ -51,6 +51,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
   bool _textProgressEnabled = true;
   bool _smartDetectionEnabled = true;
   bool _smartNavigationEnabled = true;
+  bool _smartWeatherEnabled = true;
   bool _otpDetectionEnabled = true;
   bool _otpAutoCopyEnabled = false;
   bool _hasCustomParserDictionary = false;
@@ -189,6 +190,8 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
           await LiveBridgePlatform.getSmartStatusDetectionEnabled();
       final bool smartNavigationEnabled =
           await LiveBridgePlatform.getSmartNavigationEnabled();
+      final bool smartWeatherEnabled =
+          await LiveBridgePlatform.getSmartWeatherEnabled();
       final bool otpDetectionEnabled =
           await LiveBridgePlatform.getOtpDetectionEnabled();
       final bool otpAutoCopyEnabled =
@@ -268,6 +271,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
         _textProgressEnabled = textProgressEnabled;
         _smartDetectionEnabled = smartDetectionEnabled;
         _smartNavigationEnabled = smartNavigationEnabled;
+        _smartWeatherEnabled = smartWeatherEnabled;
         _otpDetectionEnabled = otpDetectionEnabled;
         _otpAutoCopyEnabled = otpAutoCopyEnabled;
         _updateChecksEnabled = updateChecksEnabled;
@@ -691,6 +695,12 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     HapticFeedback.selectionClick();
     setState(() => _smartNavigationEnabled = value);
     await LiveBridgePlatform.setSmartNavigationEnabled(value);
+  }
+
+  Future<void> _setSmartWeather(bool value) async {
+    HapticFeedback.selectionClick();
+    setState(() => _smartWeatherEnabled = value);
+    await LiveBridgePlatform.setSmartWeatherEnabled(value);
   }
 
   Future<void> _setOtpDetection(bool value) async {
@@ -1806,6 +1816,26 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
             subtitle: Text(
               _smartDetectionEnabled
                   ? s.smartNavigationSubtitle
+                  : s.smartNavigationDisabledSubtitle,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 13,
+              ),
+            ),
+            contentPadding: EdgeInsets.zero,
+            activeThumbColor: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile.adaptive(
+            value: _smartWeatherEnabled,
+            onChanged: _smartDetectionEnabled ? _setSmartWeather : null,
+            title: Text(
+              s.smartWeatherTitle,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              _smartDetectionEnabled
+                  ? s.smartWeatherSubtitle
                   : s.smartNavigationDisabledSubtitle,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,

@@ -107,6 +107,10 @@ class LiveBridgePlatform {
       _askBool('getSmartNavigationEnabled');
   static Future<bool> setSmartNavigationEnabled(bool value) =>
       _askBool('setSmartNavigationEnabled', {'value': value});
+  static Future<bool> getSmartWeatherEnabled() =>
+      _askBool('getSmartWeatherEnabled');
+  static Future<bool> setSmartWeatherEnabled(bool value) =>
+      _askBool('setSmartWeatherEnabled', {'value': value});
   static Future<bool> getOtpDetectionEnabled() =>
       _askBool('getOtpDetectionEnabled');
   static Future<bool> setOtpDetectionEnabled(bool value) =>

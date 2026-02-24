@@ -135,6 +135,14 @@ class ConverterPrefs(context: Context) {
         prefs.edit().putBoolean(KEY_SMART_NAVIGATION_ENABLED, value).apply()
     }
 
+    fun getSmartWeatherEnabled(): Boolean {
+        return prefs.getBoolean(KEY_SMART_WEATHER_ENABLED, true)
+    }
+
+    fun setSmartWeatherEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_SMART_WEATHER_ENABLED, value).apply()
+    }
+
     fun getOtpDetectionEnabled(): Boolean {
         return prefs.getBoolean(KEY_OTP_DETECTION_ENABLED, true)
     }
@@ -314,6 +322,7 @@ class ConverterPrefs(context: Context) {
         private const val KEY_AOSP_CUTTING_ENABLED = "aosp_cutting_enabled"
         private const val KEY_SMART_STATUS_ENABLED = "smart_status_enabled"
         private const val KEY_SMART_NAVIGATION_ENABLED = "smart_navigation_enabled"
+        private const val KEY_SMART_WEATHER_ENABLED = "smart_weather_enabled"
         private const val KEY_OTP_DETECTION_ENABLED = "otp_detection_enabled"
         private const val KEY_OTP_AUTO_COPY_ENABLED = "otp_auto_copy_enabled"
         private const val KEY_OTP_PACKAGE_RULES = "otp_package_rules"

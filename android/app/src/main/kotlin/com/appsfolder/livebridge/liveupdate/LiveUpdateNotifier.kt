@@ -39,31 +39,6 @@ object LiveUpdateNotifier {
     private const val OTP_AUTOCOPY_COPIED_SHOW_DELAY_MS = 1_000L
     private const val OTP_AUTOCOPY_COPIED_SHOW_DURATION_MS = 1_500L
     private const val AOSP_ISLAND_TEXT_LIMIT = 7
-    private val BLOCKED_SOURCE_PACKAGES = setOf(
-        "ru.dublgis.dgismobile"
-    )
-    private val KNOWN_NAVIGATION_PACKAGES = setOf(
-        "ru.yandex.yandexmaps",
-        "com.google.android.apps.maps",
-        "com.waze"
-    )
-    private val NAVIGATION_DISTANCE_PATTERN = Regex(
-        "(?<!\\d)\\d{1,4}(?:[\\s.,]\\d{1,2})?\\s*(?:км|km|м|m|mi|ft|миль|фут)\\b",
-        setOf(RegexOption.IGNORE_CASE)
-    )
-    private val TEXT_PROGRESS_PERCENT_PATTERN = Regex("(?<!\\d)(\\d{1,3})\\s*%")
-    private val TEXT_PROGRESS_DISCOUNT_CONTEXT_PATTERN = Regex(
-        "(скид|акци|промокод|промо|купон|распрод|кэшб[еэ]к|кешб[еэ]к|discount|promo|coupon|sale|cashback|off\\b|выгод|bonus|бонус|save|deal|special\\s+offer|limited\\s+time|дарим|подар)",
-        setOf(RegexOption.IGNORE_CASE)
-    )
-    private val TEXT_PROGRESS_OFFER_CONTEXT_PATTERN = Regex(
-        "(при\\s+заказ|при\\s+покуп|minimum\\s+order|order\\s+from|в\\s+приложени\\S*\\s+акци)",
-        setOf(RegexOption.IGNORE_CASE)
-    )
-    private val TEXT_PROGRESS_MONEY_CONTEXT_PATTERN = Regex(
-        "(\\d{2,7}\\s*(?:₽|руб\\.?|рубл(?:ей|я|ь)?|rur|usd|eur|\\$|€|kzt|тенге))",
-        setOf(RegexOption.IGNORE_CASE)
-    )
 
     private val OTP_CODE_LENGTH = 4..8
     private val progressColor = Color.valueOf(15f / 255f, 118f / 255f, 110f / 255f, 1f).toArgb()
@@ -133,17 +108,16 @@ object LiveUpdateNotifier {
             return false
         }
 
-        if (!passesBaseFilters(context.packageName, prefs, sbn)) {
-            val staleAggregateIds = synchronized(stateLock) {
-                clearAggregateTrackingForSbnKeyLocked(sbn.key)
-            }
-            staleAggregateIds.forEach(manager::cancel)
-            manager.cancel(mirrorIdForKey(sbn.key))
-            return false
-        }
-
         return try {
             val parserDictionary = LiveParserDictionaryLoader.get(context, prefs)
+            if (!passesBaseFilters(context.packageName, prefs, sbn, parserDictionary)) {
+                val staleAggregateIds = synchronized(stateLock) {
+                    clearAggregateTrackingForSbnKeyLocked(sbn.key)
+                }
+                staleAggregateIds.forEach(manager::cancel)
+                manager.cancel(mirrorIdForKey(sbn.key))
+                return false
+            }
             val appPresentationOverride = AppPresentationOverridesLoader
                 .get(prefs)
                 .resolve(sbn.packageName.lowercase(Locale.ROOT))
@@ -159,12 +133,14 @@ object LiveUpdateNotifier {
                 null
             }
 
-            val smartMatch = if (!hasNativeProgress && otpMatch == null && prefs.getSmartStatusDetectionEnabled()) {
+            val smartMatch = if (otpMatch == null && prefs.getSmartStatusDetectionEnabled()) {
                 detectSmartStage(
                     packageName = sbn.packageName,
                     source = source,
                     parserDictionary = parserDictionary,
-                    navigationEnabled = prefs.getSmartNavigationEnabled()
+                    navigationEnabled = prefs.getSmartNavigationEnabled(),
+                    weatherEnabled = prefs.getSmartWeatherEnabled(),
+                    hasNativeProgress = hasNativeProgress
                 )
             } else {
                 null
@@ -176,7 +152,8 @@ object LiveUpdateNotifier {
             ) {
                 detectTextProgress(
                     packageName = sbn.packageName,
-                    source = source
+                    source = source,
+                    parserDictionary = parserDictionary
                 )
             } else {
                 null
@@ -361,7 +338,19 @@ object LiveUpdateNotifier {
                         if (smartRuleId == "navigation") {
                             extractNavigationDistanceText(
                                 notification = source,
-                                fallbackTitle = sbn.packageName
+                                fallbackTitle = sbn.packageName,
+                                parserDictionary = parserDictionary
+                            ) ?: smartShortStatusText(
+                                context = context,
+                                ruleId = smartRuleId,
+                                stageValue = routeState.stageValue,
+                                parserDictionary = parserDictionary
+                            )
+                        } else if (smartRuleId == "weather") {
+                            extractWeatherTemperatureText(
+                                notification = source,
+                                fallbackTitle = sbn.packageName,
+                                parserDictionary = parserDictionary
                             ) ?: smartShortStatusText(
                                 context = context,
                                 ruleId = smartRuleId,
@@ -376,12 +365,17 @@ object LiveUpdateNotifier {
                                 parserDictionary = parserDictionary
                             )
                         } ?: routeState.compactOrderCode
+                    val smartProgressOverride = if (smartRuleId == "weather") {
+                        null
+                    } else {
+                        ProgressOverride(routeState.stageValue, routeState.stageMax)
+                    }
 
                     val notification = buildMirroredNotification(
                         context = context,
                         sbn = sbn,
                         appPresentationOverride = appPresentationOverride,
-                        progressOverride = ProgressOverride(routeState.stageValue, routeState.stageMax),
+                        progressOverride = smartProgressOverride,
                         otpOverride = null,
                         smartShortTextOverride = smartStatusText,
                         smartRuleId = smartRuleId,
@@ -394,7 +388,7 @@ object LiveUpdateNotifier {
                         promotedNotification = notification,
                         sbn = sbn,
                         appPresentationOverride = appPresentationOverride,
-                        progressOverride = ProgressOverride(routeState.stageValue, routeState.stageMax),
+                        progressOverride = smartProgressOverride,
                         otpOverride = null,
                         smartShortTextOverride = smartStatusText,
                         smartRuleId = smartRuleId
@@ -453,7 +447,8 @@ object LiveUpdateNotifier {
     private fun passesBaseFilters(
         appPackageName: String,
         prefs: ConverterPrefs,
-        sbn: StatusBarNotification
+        sbn: StatusBarNotification,
+        parserDictionary: LiveParserDictionary
     ): Boolean {
         if (sbn.packageName == appPackageName) {
             return false
@@ -473,7 +468,7 @@ object LiveUpdateNotifier {
             return false
         }
 
-        if (BLOCKED_SOURCE_PACKAGES.contains(sbn.packageName.lowercase(Locale.ROOT))) {
+        if (parserDictionary.blockedSourcePackages.contains(sbn.packageName.lowercase(Locale.ROOT))) {
             return false
         }
 
@@ -491,12 +486,13 @@ object LiveUpdateNotifier {
         requestPromoted: Boolean,
         otpShortTextOverride: String? = null
     ): Notification {
+        val parserDictionary = LiveParserDictionaryLoader.get(context, ConverterPrefs(context))
         val source = sbn.notification
         val sourceSmallIcon = resolveSourceSmallIcon(context, sbn)
         val appSmallIcon = resolveAppSmallIcon(context, sbn.packageName)
         val shouldTryNavigationArrowIcon =
             appPresentationOverride.iconSource == NotificationIconSource.NOTIFICATION &&
-                    (smartRuleId == "navigation" || isLikelyNavigationPackage(sbn.packageName))
+                    (smartRuleId == "navigation" || isLikelyNavigationPackage(sbn.packageName, parserDictionary))
         val navigationDrawable =
             if (shouldTryNavigationArrowIcon) {
                 resolveRemoteDrawableAssets(context, sbn)
@@ -653,17 +649,27 @@ object LiveUpdateNotifier {
         packageName: String,
         source: Notification,
         parserDictionary: LiveParserDictionary,
-        navigationEnabled: Boolean
+        navigationEnabled: Boolean,
+        weatherEnabled: Boolean,
+        hasNativeProgress: Boolean
     ): SmartStageMatch? {
+        val isNavigationPackage = isLikelyNavigationPackage(packageName, parserDictionary)
+        val packageLower = packageName.lowercase(Locale.ROOT)
+        val isWeatherPackage = isLikelyWeatherPackage(packageLower, parserDictionary)
         val combinedText = collectNotificationText(
             notification = source,
             fallbackTitle = packageName,
-            includeRemoteViewTexts = isLikelyNavigationPackage(packageName)
+            includeRemoteViewTexts = isNavigationPackage || isWeatherPackage
         ).lowercase(Locale.ROOT)
-        val packageLower = packageName.lowercase(Locale.ROOT)
 
         for (rule in parserDictionary.smartRules) {
+            if (hasNativeProgress && rule.id != "weather") {
+                continue
+            }
             if (rule.id == "navigation" && !navigationEnabled) {
+                continue
+            }
+            if (rule.id == "weather" && !weatherEnabled) {
                 continue
             }
             if (!rule.isRelevant(packageLower, combinedText)) {
@@ -674,10 +680,10 @@ object LiveUpdateNotifier {
             }
 
             val matchedSignal = rule.signals.firstOrNull { it.pattern.containsMatchIn(combinedText) } ?: continue
-            val entityToken = if (rule.id == "navigation") {
-                "route"
-            } else {
-                extractEntityToken(combinedText, parserDictionary)
+            val entityToken = when (rule.id) {
+                "navigation" -> "route"
+                "weather" -> "weather"
+                else -> extractEntityToken(combinedText, parserDictionary)
             }
             val compactOrderCode = if (rule.id == "food") {
                 extractCompactOrderCode(entityToken)
@@ -694,12 +700,54 @@ object LiveUpdateNotifier {
             )
         }
 
+        if (weatherEnabled) {
+            detectWeatherSmartStage(
+                packageNameLower = packageLower,
+                source = source,
+                parserDictionary = parserDictionary
+            )?.let { return it }
+        }
+
         return null
+    }
+
+    private fun detectWeatherSmartStage(
+        packageNameLower: String,
+        source: Notification,
+        parserDictionary: LiveParserDictionary
+    ): SmartStageMatch? {
+        val combinedText = collectNotificationText(
+            notification = source,
+            fallbackTitle = packageNameLower,
+            includeRemoteViewTexts = true
+        )
+        if (combinedText.isBlank()) {
+            return null
+        }
+        val likelyWeatherPackage = isLikelyWeatherPackage(packageNameLower, parserDictionary)
+        val hasWeatherContext = parserDictionary.weatherContextPattern.containsMatchIn(combinedText)
+        if (!likelyWeatherPackage && !hasWeatherContext) {
+            return null
+        }
+
+        val temperature = extractWeatherTemperatureFromText(combinedText, parserDictionary) ?: return null
+        if (temperature.isBlank()) {
+            return null
+        }
+
+        return SmartStageMatch(
+            aggregateKey = "$packageNameLower:weather:weather",
+            stageValue = 1,
+            maxStage = 1,
+            compactOrderCode = null,
+            keepHighestStage = false
+        )
     }
 
     private fun detectTextProgress(
         packageName: String,
-        source: Notification
+        source: Notification,
+        parserDictionary: LiveParserDictionary
     ): TextProgressMatch? {
         val combinedText = collectNotificationText(
             notification = source,
@@ -710,17 +758,28 @@ object LiveUpdateNotifier {
             return null
         }
 
+        val percentPattern = parserDictionary.textProgressPercentPattern
         val combinedLower = combinedText.lowercase(Locale.ROOT)
-        val matches = TEXT_PROGRESS_PERCENT_PATTERN.findAll(combinedText)
+        val matches = percentPattern.findAll(combinedText)
         for (match in matches) {
             val percentValue = match.groupValues.getOrNull(1)?.toIntOrNull() ?: continue
             if (percentValue !in 0..100) {
                 continue
             }
-            if (isDiscountPercentContext(
+            if (!hasTextProgressContextHint(
                     textLower = combinedLower,
                     start = match.range.first,
-                    endExclusive = match.range.last + 1
+                    endExclusive = match.range.last + 1,
+                    parserDictionary = parserDictionary
+                )
+            ) {
+                continue
+            }
+            if (isExcludedTextProgressContext(
+                    textLower = combinedLower,
+                    start = match.range.first,
+                    endExclusive = match.range.last + 1,
+                    parserDictionary = parserDictionary
                 )
             ) {
                 continue
@@ -733,17 +792,30 @@ object LiveUpdateNotifier {
         return null
     }
 
-    private fun isDiscountPercentContext(
+    private fun hasTextProgressContextHint(
         textLower: String,
         start: Int,
-        endExclusive: Int
+        endExclusive: Int,
+        parserDictionary: LiveParserDictionary
     ): Boolean {
-        val windowStart = (start - 56).coerceAtLeast(0)
-        val windowEnd = (endExclusive + 56).coerceAtMost(textLower.length)
+        val contextWindow = parserDictionary.textProgressContextWindow
+        val windowStart = (start - contextWindow).coerceAtLeast(0)
+        val windowEnd = (endExclusive + contextWindow).coerceAtMost(textLower.length)
         val context = textLower.substring(windowStart, windowEnd)
-        return TEXT_PROGRESS_DISCOUNT_CONTEXT_PATTERN.containsMatchIn(context) ||
-                TEXT_PROGRESS_OFFER_CONTEXT_PATTERN.containsMatchIn(context) ||
-                TEXT_PROGRESS_MONEY_CONTEXT_PATTERN.containsMatchIn(context)
+        return parserDictionary.textProgressIncludeContextPattern.containsMatchIn(context)
+    }
+
+    private fun isExcludedTextProgressContext(
+        textLower: String,
+        start: Int,
+        endExclusive: Int,
+        parserDictionary: LiveParserDictionary
+    ): Boolean {
+        val contextWindow = parserDictionary.textProgressContextWindow
+        val windowStart = (start - contextWindow).coerceAtLeast(0)
+        val windowEnd = (endExclusive + contextWindow).coerceAtMost(textLower.length)
+        val context = textLower.substring(windowStart, windowEnd)
+        return parserDictionary.textProgressExcludeContextPattern.containsMatchIn(context)
     }
 
     private fun detectOtpCode(
@@ -863,17 +935,48 @@ object LiveUpdateNotifier {
         )
     }
 
-    private fun extractNavigationDistanceText(notification: Notification, fallbackTitle: String): String? {
+    private fun extractNavigationDistanceText(
+        notification: Notification,
+        fallbackTitle: String,
+        parserDictionary: LiveParserDictionary
+    ): String? {
         val combinedText = collectNotificationText(
             notification = notification,
             fallbackTitle = fallbackTitle,
             includeRemoteViewTexts = true
         )
-        val match = NAVIGATION_DISTANCE_PATTERN.find(combinedText) ?: return null
+        val match = parserDictionary.navigationDistancePattern.find(combinedText) ?: return null
         return match.value
             .replace(Regex("\\s+"), " ")
             .trim()
             .ifBlank { null }
+    }
+
+    private fun extractWeatherTemperatureText(
+        notification: Notification,
+        fallbackTitle: String,
+        parserDictionary: LiveParserDictionary
+    ): String? {
+        val combinedText = collectNotificationText(
+            notification = notification,
+            fallbackTitle = fallbackTitle,
+            includeRemoteViewTexts = true
+        )
+        return extractWeatherTemperatureFromText(combinedText, parserDictionary)
+    }
+
+    private fun extractWeatherTemperatureFromText(
+        combinedText: String,
+        parserDictionary: LiveParserDictionary
+    ): String? {
+        val match = parserDictionary.weatherTemperaturePattern.find(combinedText) ?: return null
+        val rawNumber = match.groupValues.getOrNull(1).orEmpty()
+            .replace('−', '-')
+            .trim()
+        if (rawNumber.isBlank()) {
+            return null
+        }
+        return "$rawNumber°"
     }
 
     private fun isRussianLocale(context: Context): Boolean {
@@ -1558,14 +1661,22 @@ object LiveUpdateNotifier {
         }
     }
 
-    private fun isLikelyNavigationPackage(packageName: String): Boolean {
+    private fun isLikelyNavigationPackage(
+        packageName: String,
+        parserDictionary: LiveParserDictionary
+    ): Boolean {
         val packageLower = packageName.lowercase(Locale.ROOT)
-        if (KNOWN_NAVIGATION_PACKAGES.contains(packageLower)) {
+        if (parserDictionary.knownNavigationPackages.contains(packageLower)) {
             return true
         }
-        return packageLower.contains("navigation") ||
-                packageLower.contains("navigator") ||
-                packageLower.contains(".maps")
+        return parserDictionary.navigationPackageMarkers.any(packageLower::contains)
+    }
+
+    private fun isLikelyWeatherPackage(
+        packageNameLower: String,
+        parserDictionary: LiveParserDictionary
+    ): Boolean {
+        return parserDictionary.weatherPackageHints.any(packageNameLower::contains)
     }
 
     private fun mirrorIdForKey(key: String): Int {

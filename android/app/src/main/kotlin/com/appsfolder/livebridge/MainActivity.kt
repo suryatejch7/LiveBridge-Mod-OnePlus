@@ -312,6 +312,12 @@ class MainActivity : FlutterActivity() {
                 res.success(true)
             }
 
+            "getSmartWeatherEnabled" -> res.success(prefs.getSmartWeatherEnabled())
+            "setSmartWeatherEnabled" -> {
+                prefs.setSmartWeatherEnabled(call.argument<Boolean>("value") ?: true)
+                res.success(true)
+            }
+
             "getOtpDetectionEnabled" -> res.success(prefs.getOtpDetectionEnabled())
             "setOtpDetectionEnabled" -> {
                 prefs.setOtpDetectionEnabled(call.argument<Boolean>("value") ?: true)

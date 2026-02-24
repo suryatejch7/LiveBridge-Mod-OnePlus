@@ -8,9 +8,20 @@ import java.util.Locale
 
 internal data class LiveParserDictionary(
     val smartRules: List<SmartRuleEntry>,
+    val blockedSourcePackages: Set<String>,
+    val knownNavigationPackages: Set<String>,
+    val navigationPackageMarkers: Set<String>,
+    val navigationDistancePattern: Regex,
     val otpStrongTriggers: Set<String>,
     val otpLooseTriggerPattern: Regex,
     val moneyContextPattern: Regex,
+    val textProgressPercentPattern: Regex,
+    val textProgressIncludeContextPattern: Regex,
+    val textProgressExcludeContextPattern: Regex,
+    val textProgressContextWindow: Int,
+    val weatherPackageHints: Set<String>,
+    val weatherContextPattern: Regex,
+    val weatherTemperaturePattern: Regex,
     val otpCodePatterns: List<Regex>,
     val orderContextHints: Set<String>,
     val entityTokenPatterns: List<Regex>,
@@ -26,9 +37,20 @@ internal data class LiveParserDictionary(
             val emptyRegex = Regex("(?!)")
             return LiveParserDictionary(
                 smartRules = emptyList(),
+                blockedSourcePackages = emptySet(),
+                knownNavigationPackages = emptySet(),
+                navigationPackageMarkers = emptySet(),
+                navigationDistancePattern = emptyRegex,
                 otpStrongTriggers = emptySet(),
                 otpLooseTriggerPattern = emptyRegex,
                 moneyContextPattern = emptyRegex,
+                textProgressPercentPattern = emptyRegex,
+                textProgressIncludeContextPattern = emptyRegex,
+                textProgressExcludeContextPattern = emptyRegex,
+                textProgressContextWindow = 80,
+                weatherPackageHints = emptySet(),
+                weatherContextPattern = emptyRegex,
+                weatherTemperaturePattern = emptyRegex,
                 otpCodePatterns = emptyList(),
                 orderContextHints = emptySet(),
                 entityTokenPatterns = emptyList(),
@@ -44,6 +66,22 @@ internal data class LiveParserDictionary(
             }
 
             val smartRules = parseSmartRules(root.optJSONArray("smart_rules")) ?: defaults.smartRules
+            val blockedSourcePackages =
+                parseStringSet(root.optJSONArray("blocked_source_packages")).ifEmpty {
+                    defaults.blockedSourcePackages
+                }
+            val knownNavigationPackages =
+                parseStringSet(root.optJSONArray("known_navigation_packages")).ifEmpty {
+                    defaults.knownNavigationPackages
+                }
+            val navigationPackageMarkers =
+                parseStringSet(root.optJSONArray("navigation_package_markers")).ifEmpty {
+                    defaults.navigationPackageMarkers
+                }
+            val navigationDistancePattern = parseRegex(
+                root.optString("navigation_distance_pattern"),
+                ignoreCase = true
+            ) ?: defaults.navigationDistancePattern
             val otpStrongTriggers =
                 parseStringSet(root.optJSONArray("otp_strong_triggers")).ifEmpty { defaults.otpStrongTriggers }
             val otpLooseTriggerPattern = parseRegex(
@@ -54,6 +92,36 @@ internal data class LiveParserDictionary(
                 root.optString("money_context_pattern"),
                 ignoreCase = true
             ) ?: defaults.moneyContextPattern
+            val textProgressPercentPattern = parseRegex(
+                root.optString("text_progress_percent_pattern"),
+                ignoreCase = true
+            ) ?: defaults.textProgressPercentPattern
+            val textProgressIncludeContextPattern = parseRegex(
+                root.optString("text_progress_include_context_pattern"),
+                ignoreCase = true
+            ) ?: defaults.textProgressIncludeContextPattern
+            val textProgressExcludeContextPattern = parseRegex(
+                root.optString("text_progress_exclude_context_pattern"),
+                ignoreCase = true
+            ) ?: defaults.textProgressExcludeContextPattern
+            val textProgressContextWindow =
+                root.optInt("text_progress_context_window", defaults.textProgressContextWindow)
+                    .coerceIn(24, 240)
+            val weatherPackageHints =
+                parseStringSet(root.optJSONArray("weather_package_hints")).ifEmpty {
+                    defaults.weatherPackageHints
+                }
+            val weatherContextPattern = parseRegex(
+                root.optString("weather_context_pattern"),
+                ignoreCase = true
+            ) ?: defaults.weatherContextPattern
+            val parsedWeatherTemperaturePattern = parseRegex(
+                root.optString("weather_temperature_pattern"),
+                ignoreCase = true
+            )
+            val weatherTemperaturePattern = parsedWeatherTemperaturePattern
+                ?.takeIf { it.containsMatchIn("1°") && it.containsMatchIn("-5°") }
+                ?: defaults.weatherTemperaturePattern
 
             val otpCodePatterns =
                 parseRegexList(root.optJSONArray("otp_code_patterns"), ignoreCase = false).ifEmpty {
@@ -69,9 +137,20 @@ internal data class LiveParserDictionary(
 
             return LiveParserDictionary(
                 smartRules = smartRules,
+                blockedSourcePackages = blockedSourcePackages,
+                knownNavigationPackages = knownNavigationPackages,
+                navigationPackageMarkers = navigationPackageMarkers,
+                navigationDistancePattern = navigationDistancePattern,
                 otpStrongTriggers = otpStrongTriggers,
                 otpLooseTriggerPattern = otpLooseTriggerPattern,
                 moneyContextPattern = moneyContextPattern,
+                textProgressPercentPattern = textProgressPercentPattern,
+                textProgressIncludeContextPattern = textProgressIncludeContextPattern,
+                textProgressExcludeContextPattern = textProgressExcludeContextPattern,
+                textProgressContextWindow = textProgressContextWindow,
+                weatherPackageHints = weatherPackageHints,
+                weatherContextPattern = weatherContextPattern,
+                weatherTemperaturePattern = weatherTemperaturePattern,
                 otpCodePatterns = otpCodePatterns,
                 orderContextHints = orderContextHints,
                 entityTokenPatterns = entityTokenPatterns,

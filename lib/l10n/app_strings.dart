@@ -227,6 +227,10 @@ class AppStrings {
   String get smartNavigationSubtitle => isRu
       ? 'Распознавание уведомлений навигации.'
       : 'Navigation notification detection.';
+  String get smartWeatherTitle => isRu ? 'Погода' : 'Weather';
+  String get smartWeatherSubtitle => isRu
+      ? 'Распознавание погодных уведомлений (температура в острове).'
+      : 'Weather notification detection (temperature in island).';
   String get smartNavigationDisabledSubtitle => isRu
       ? 'Сначала включите умное распознавание.'
       : 'Enable smart status detection first.';

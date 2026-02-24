@@ -7,6 +7,7 @@ LiveBridge is a Flutter Android app with native Kotlin logic that converts regul
 - Converts progress notifications into Live Updates
 - Smart status detection (taxi, delivery, food order flows)
 - OTP code extraction from notifications
+- Real-time island navigation
 - App filtering modes
 - Per-app presentation overrides
 
@@ -16,6 +17,7 @@ LiveBridge is a Flutter Android app with native Kotlin logic that converts regul
 - Predictive back gesture
 - Edge-to-edge layout without app bars
 - Customizable parsing dictionaries
+- Decent FGS
 
 ## Requirements
 

@@ -219,6 +219,12 @@ class MainActivity : FlutterActivity() {
                 res.success(true)
             }
 
+            "getTextProgressEnabled" -> res.success(prefs.getTextProgressEnabled())
+            "setTextProgressEnabled" -> {
+                prefs.setTextProgressEnabled(call.argument<Boolean>("value") ?: true)
+                res.success(true)
+            }
+
             "getConverterEnabled" -> res.success(prefs.getConverterEnabled())
             "setConverterEnabled" -> {
                 val value = call.argument<Boolean>("value") ?: true

@@ -231,16 +231,21 @@ class AppStrings {
       ? 'Сначала включите умное распознавание.'
       : 'Enable smart status detection first.';
   String get smartDetectionDisabledSubtitle => isRu
-      ? 'Отключено в режиме "Только прогресс".'
-      : 'Disabled while "Only progress" mode is enabled.';
+      ? 'Отключено в режиме "Нативный прогресс".'
+      : 'Disabled while "Native progress" mode is enabled.';
   String get conflictingModesHint => isRu
-      ? 'Чтобы работали текстовые статусы, отключите режим "Только прогресс".'
-      : 'Turn off "Only progress" mode to enable food/taxi/navigation text status recognition.';
+      ? 'Чтобы работали текстовые статусы, отключите режим "Нативный прогресс".'
+      : 'Turn off "Native progress" mode to enable food/taxi/navigation text status recognition.';
   String get onlyProgressTitle =>
-      isRu ? 'Только нативный прогресс' : 'Only native progress';
+      isRu ? 'Нативный прогресс' : 'Native progress';
   String get onlyProgressSubtitle => isRu
       ? 'Если включено, конвертируются только уведомления с системным прогрессбаром.'
       : 'When enabled, only notifications with a system progress bar are converted.';
+  String get textProgressTitle =>
+      isRu ? 'Текстовые прогрессы' : 'Text progress';
+  String get textProgressSubtitle => isRu
+      ? 'Если в тексте есть %, и это не скидка/акция, считать как прогресс и обновлять остров.'
+      : 'If text contains % and it is not discount-related, treat it as progress and update island.';
 
   String get blockedTitle => isRu
       ? 'Пожалуйста, купите нормальный смартфон'

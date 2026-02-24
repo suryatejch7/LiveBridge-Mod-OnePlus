@@ -48,6 +48,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
   bool _keepAliveForegroundEnabled = false;
   bool _aospCuttingEnabled = false;
   bool _onlyWithProgress = true;
+  bool _textProgressEnabled = true;
   bool _smartDetectionEnabled = true;
   bool _smartNavigationEnabled = true;
   bool _otpDetectionEnabled = true;
@@ -181,6 +182,8 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
           await LiveBridgePlatform.getAospCuttingEnabled();
       final bool onlyWithProgress =
           await LiveBridgePlatform.getOnlyWithProgress();
+      final bool textProgressEnabled =
+          await LiveBridgePlatform.getTextProgressEnabled();
       final bool smartDetectionEnabled =
           await LiveBridgePlatform.getSmartStatusDetectionEnabled();
       final bool smartNavigationEnabled =
@@ -261,6 +264,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
         _keepAliveForegroundEnabled = keepAliveForegroundEnabled;
         _aospCuttingEnabled = aospCuttingEnabled;
         _onlyWithProgress = onlyWithProgress;
+        _textProgressEnabled = textProgressEnabled;
         _smartDetectionEnabled = smartDetectionEnabled;
         _smartNavigationEnabled = smartNavigationEnabled;
         _otpDetectionEnabled = otpDetectionEnabled;
@@ -326,6 +330,12 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     HapticFeedback.selectionClick();
     setState(() => _onlyWithProgress = value);
     await LiveBridgePlatform.setOnlyWithProgress(value);
+  }
+
+  Future<void> _setTextProgressEnabled(bool value) async {
+    HapticFeedback.selectionClick();
+    setState(() => _textProgressEnabled = value);
+    await LiveBridgePlatform.setTextProgressEnabled(value);
   }
 
   Future<void> _setConverterEnabled(bool value) async {
@@ -1617,6 +1627,24 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
             ),
             subtitle: Text(
               s.onlyProgressSubtitle,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 13,
+              ),
+            ),
+            contentPadding: EdgeInsets.zero,
+            activeThumbColor: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile.adaptive(
+            value: _textProgressEnabled,
+            onChanged: _setTextProgressEnabled,
+            title: Text(
+              s.textProgressTitle,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              s.textProgressSubtitle,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
                 fontSize: 13,

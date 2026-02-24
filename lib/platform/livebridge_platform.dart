@@ -51,6 +51,10 @@ class LiveBridgePlatform {
   static Future<bool> getOnlyWithProgress() => _askBool('getOnlyWithProgress');
   static Future<bool> setOnlyWithProgress(bool value) =>
       _askBool('setOnlyWithProgress', {'value': value});
+  static Future<bool> getTextProgressEnabled() =>
+      _askBool('getTextProgressEnabled');
+  static Future<bool> setTextProgressEnabled(bool value) =>
+      _askBool('setTextProgressEnabled', {'value': value});
   static Future<bool> getConverterEnabled() => _askBool('getConverterEnabled');
   static Future<bool> setConverterEnabled(bool value) =>
       _askBool('setConverterEnabled', {'value': value});

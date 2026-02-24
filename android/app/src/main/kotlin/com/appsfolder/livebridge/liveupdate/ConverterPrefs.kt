@@ -41,6 +41,14 @@ class ConverterPrefs(context: Context) {
         prefs.edit().putBoolean(KEY_ONLY_WITH_PROGRESS, value).apply()
     }
 
+    fun getTextProgressEnabled(): Boolean {
+        return prefs.getBoolean(KEY_TEXT_PROGRESS_ENABLED, true)
+    }
+
+    fun setTextProgressEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_TEXT_PROGRESS_ENABLED, value).apply()
+    }
+
     fun getConverterEnabled(): Boolean {
         return prefs.getBoolean(KEY_CONVERTER_ENABLED, true)
     }
@@ -295,6 +303,7 @@ class ConverterPrefs(context: Context) {
         private const val KEY_PACKAGE_RULES = "package_rules"
         private const val KEY_PACKAGE_MODE = "package_mode"
         private const val KEY_ONLY_WITH_PROGRESS = "only_with_progress"
+        private const val KEY_TEXT_PROGRESS_ENABLED = "text_progress_enabled"
         private const val KEY_CONVERTER_ENABLED = "converter_enabled"
         private const val KEY_KEEP_ALIVE_FOREGROUND_ENABLED = "keep_alive_foreground_enabled"
         private const val KEY_UPDATE_CHECKS_ENABLED = "update_checks_enabled"

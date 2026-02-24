@@ -12,6 +12,9 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Handler
@@ -46,6 +49,19 @@ object LiveUpdateNotifier {
     )
     private val NAVIGATION_DISTANCE_PATTERN = Regex(
         "(?<!\\d)\\d{1,4}(?:[\\s.,]\\d{1,2})?\\s*(?:км|km|м|m|mi|ft|миль|фут)\\b",
+        setOf(RegexOption.IGNORE_CASE)
+    )
+    private val TEXT_PROGRESS_PERCENT_PATTERN = Regex("(?<!\\d)(\\d{1,3})\\s*%")
+    private val TEXT_PROGRESS_DISCOUNT_CONTEXT_PATTERN = Regex(
+        "(скид|акци|промокод|промо|купон|распрод|кэшб[еэ]к|кешб[еэ]к|discount|promo|coupon|sale|cashback|off\\b|выгод|bonus|бонус|save|deal|special\\s+offer|limited\\s+time|дарим|подар)",
+        setOf(RegexOption.IGNORE_CASE)
+    )
+    private val TEXT_PROGRESS_OFFER_CONTEXT_PATTERN = Regex(
+        "(при\\s+заказ|при\\s+покуп|minimum\\s+order|order\\s+from|в\\s+приложени\\S*\\s+акци)",
+        setOf(RegexOption.IGNORE_CASE)
+    )
+    private val TEXT_PROGRESS_MONEY_CONTEXT_PATTERN = Regex(
+        "(\\d{2,7}\\s*(?:₽|руб\\.?|рубл(?:ей|я|ь)?|rur|usd|eur|\\$|€|kzt|тенге))",
         setOf(RegexOption.IGNORE_CASE)
     )
 
@@ -154,7 +170,24 @@ object LiveUpdateNotifier {
                 null
             }
 
-            if (!hasNativeProgress && otpMatch == null && smartMatch == null && prefs.getOnlyWithProgress()) {
+            val textProgressMatch = if (!hasNativeProgress &&
+                otpMatch == null &&
+                prefs.getTextProgressEnabled()
+            ) {
+                detectTextProgress(
+                    packageName = sbn.packageName,
+                    source = source
+                )
+            } else {
+                null
+            }
+
+            if (!hasNativeProgress &&
+                otpMatch == null &&
+                smartMatch == null &&
+                textProgressMatch == null &&
+                prefs.getOnlyWithProgress()
+            ) {
                 val staleAggregateIds = synchronized(stateLock) {
                     clearAggregateTrackingForSbnKeyLocked(sbn.key)
                 }
@@ -254,6 +287,41 @@ object LiveUpdateNotifier {
                             )
                         }
                     }
+                    true
+                }
+
+                textProgressMatch != null -> {
+                    val staleAggregateIds = synchronized(stateLock) {
+                        clearAggregateTrackingForSbnKeyLocked(sbn.key)
+                    }
+                    staleAggregateIds.forEach(manager::cancel)
+
+                    val notification = buildMirroredNotification(
+                        context = context,
+                        sbn = sbn,
+                        appPresentationOverride = appPresentationOverride,
+                        progressOverride = ProgressOverride(
+                            value = textProgressMatch.percent,
+                            max = 100
+                        ),
+                        otpOverride = null,
+                        smartShortTextOverride = textProgressMatch.shortText,
+                        requestPromoted = true
+                    )
+                    notifyWithPromotionFallback(
+                        context = context,
+                        manager = manager,
+                        notificationId = mirrorIdForKey(sbn.key),
+                        promotedNotification = notification,
+                        sbn = sbn,
+                        appPresentationOverride = appPresentationOverride,
+                        progressOverride = ProgressOverride(
+                            value = textProgressMatch.percent,
+                            max = 100
+                        ),
+                        otpOverride = null,
+                        smartShortTextOverride = textProgressMatch.shortText
+                    )
                     true
                 }
 
@@ -626,6 +694,55 @@ object LiveUpdateNotifier {
         }
 
         return null
+    }
+
+    private fun detectTextProgress(
+        packageName: String,
+        source: Notification
+    ): TextProgressMatch? {
+        val combinedText = collectNotificationText(
+            notification = source,
+            fallbackTitle = packageName,
+            includeRemoteViewTexts = true
+        )
+        if (combinedText.isBlank()) {
+            return null
+        }
+
+        val combinedLower = combinedText.lowercase(Locale.ROOT)
+        val matches = TEXT_PROGRESS_PERCENT_PATTERN.findAll(combinedText)
+        for (match in matches) {
+            val percentValue = match.groupValues.getOrNull(1)?.toIntOrNull() ?: continue
+            if (percentValue !in 0..100) {
+                continue
+            }
+            if (isDiscountPercentContext(
+                    textLower = combinedLower,
+                    start = match.range.first,
+                    endExclusive = match.range.last + 1
+                )
+            ) {
+                continue
+            }
+            return TextProgressMatch(
+                percent = percentValue,
+                shortText = "$percentValue%"
+            )
+        }
+        return null
+    }
+
+    private fun isDiscountPercentContext(
+        textLower: String,
+        start: Int,
+        endExclusive: Int
+    ): Boolean {
+        val windowStart = (start - 56).coerceAtLeast(0)
+        val windowEnd = (endExclusive + 56).coerceAtMost(textLower.length)
+        val context = textLower.substring(windowStart, windowEnd)
+        return TEXT_PROGRESS_DISCOUNT_CONTEXT_PATTERN.containsMatchIn(context) ||
+                TEXT_PROGRESS_OFFER_CONTEXT_PATTERN.containsMatchIn(context) ||
+                TEXT_PROGRESS_MONEY_CONTEXT_PATTERN.containsMatchIn(context)
     }
 
     private fun detectOtpCode(
@@ -1018,18 +1135,19 @@ object LiveUpdateNotifier {
                 ?: extractFirstRemoteDrawableResId(source.headsUpContentView, resources)
                 ?: return null
 
-        val icon = try {
-            IconCompat.createWithResource(resources, sbn.packageName, drawableResId)
-        } catch (_: Exception) {
-            null
-        }
-        val bitmap = try {
+        val rawBitmap = try {
             packageContext.getDrawable(drawableResId)?.let { drawable ->
                 drawableToBitmap(drawable)
             }
         } catch (_: Exception) {
             null
         }
+        val bitmap = rawBitmap?.let(::tintBitmapWhite)
+        val icon = bitmap?.let {
+            runCatching { IconCompat.createWithBitmap(it) }.getOrNull()
+        } ?: runCatching {
+            IconCompat.createWithResource(resources, sbn.packageName, drawableResId)
+        }.getOrNull()
 
         if (icon == null && bitmap == null) {
             return null
@@ -1059,6 +1177,27 @@ object LiveUpdateNotifier {
         drawable.setBounds(0, 0, canvas.width, canvas.height)
         drawable.draw(canvas)
         return bitmap
+    }
+
+    private fun tintBitmapWhite(source: Bitmap): Bitmap {
+        val mutableSource =
+            if (source.config == Bitmap.Config.ARGB_8888 && source.isMutable) {
+                source
+            } else {
+                source.copy(Bitmap.Config.ARGB_8888, true)
+            } ?: source
+
+        val result = Bitmap.createBitmap(
+            mutableSource.width,
+            mutableSource.height,
+            Bitmap.Config.ARGB_8888
+        )
+        val canvas = Canvas(result)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            colorFilter = PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+        }
+        canvas.drawBitmap(mutableSource, 0f, 0f, paint)
+        return result
     }
 
     private fun extractRemoteViewTexts(notification: Notification): List<String> {
@@ -1545,6 +1684,11 @@ object LiveUpdateNotifier {
         val maxStage: Int,
         val compactOrderCode: String?,
         val keepHighestStage: Boolean
+    )
+
+    private data class TextProgressMatch(
+        val percent: Int,
+        val shortText: String
     )
 
     private data class OtpMatch(

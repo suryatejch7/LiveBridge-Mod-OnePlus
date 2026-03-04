@@ -351,21 +351,34 @@ object LiveUpdateNotifier {
                             AggregateState(smartMatch.stageValue, smartMatch.maxStage)
                         }
                         state.activeSbnKeys.add(sbn.key)
+                        state.sourcesBySbnKey[sbn.key] = SmartSourceEntry(
+                            stageValue = smartMatch.stageValue,
+                            postTimeMs = sbn.postTime,
+                            sbn = sbn,
+                            compactOrderCode = smartMatch.compactOrderCode
+                        )
                         state.maxStageSeen = if (smartMatch.keepHighestStage) {
                             maxOf(state.maxStageSeen, smartMatch.stageValue)
                         } else {
                             smartMatch.stageValue
                         }
                         sbnToAggregateKey[sbn.key] = smartMatch.aggregateKey
+                        val sourceEntry = selectSmartSourceEntryLocked(
+                            aggregateState = state,
+                            keepHighestStage = smartMatch.keepHighestStage
+                        )
 
                         SmartRouteState(
                             staleAggregateIds = staleAggregateIds,
                             stageValue = state.maxStageSeen,
                             stageMax = state.maxStage,
-                            compactOrderCode = smartMatch.compactOrderCode
+                            compactOrderCode = sourceEntry?.compactOrderCode ?: smartMatch.compactOrderCode,
+                            sourceSbn = sourceEntry?.sbn ?: sbn
                         )
                     }
                     routeState.staleAggregateIds.forEach(manager::cancel)
+                    val sourceSbn = routeState.sourceSbn
+                    val sourceNotification = sourceSbn.notification
                     val smartRuleId = smartRuleIdFromAggregateKey(smartMatch.aggregateKey)
                     val defaultSmartStatus = smartShortStatusText(
                         context = context,
@@ -375,8 +388,8 @@ object LiveUpdateNotifier {
                     )
                     val vpnTraffic = if (smartRuleId == "vpn") {
                         extractVpnTrafficSpeeds(
-                            notification = source,
-                            fallbackTitle = sbn.packageName,
+                            notification = sourceNotification,
+                            fallbackTitle = sourceSbn.packageName,
                             parserDictionary = parserDictionary
                         )
                     } else {
@@ -384,21 +397,21 @@ object LiveUpdateNotifier {
                     }
                     val smartStatusText = when (smartRuleId) {
                         "navigation" -> extractNavigationDistanceText(
-                            notification = source,
-                            fallbackTitle = sbn.packageName,
+                            notification = sourceNotification,
+                            fallbackTitle = sourceSbn.packageName,
                             parserDictionary = parserDictionary
                         ) ?: defaultSmartStatus
 
                         "weather" -> extractWeatherTemperatureText(
-                            notification = source,
-                            fallbackTitle = sbn.packageName,
+                            notification = sourceNotification,
+                            fallbackTitle = sourceSbn.packageName,
                             parserDictionary = parserDictionary
                         ) ?: defaultSmartStatus
 
                         "external_device" -> extractExternalDeviceStatusText(
                             context = context,
-                            notification = source,
-                            fallbackTitle = sbn.packageName,
+                            notification = sourceNotification,
+                            fallbackTitle = sourceSbn.packageName,
                             stageValue = routeState.stageValue,
                             parserDictionary = parserDictionary
                         ) ?: defaultSmartStatus
@@ -419,7 +432,7 @@ object LiveUpdateNotifier {
 
                     val notification = buildMirroredNotification(
                         context = context,
-                        sbn = sbn,
+                        sbn = sourceSbn,
                         appPresentationOverride = appPresentationOverride,
                         progressOverride = smartProgressOverride,
                         otpOverride = null,
@@ -432,7 +445,7 @@ object LiveUpdateNotifier {
                         manager = manager,
                         notificationId = mirrorIdForKey(smartMatch.aggregateKey),
                         promotedNotification = notification,
-                        sbn = sbn,
+                        sbn = sourceSbn,
                         appPresentationOverride = appPresentationOverride,
                         progressOverride = smartProgressOverride,
                         otpOverride = null,
@@ -442,8 +455,8 @@ object LiveUpdateNotifier {
                     if (animatedIslandEnabled) {
                         val animatedTokens = buildSmartAnimatedIslandTokens(
                             ruleId = smartRuleId,
-                            notification = source,
-                            fallbackTitle = sbn.packageName,
+                            notification = sourceNotification,
+                            fallbackTitle = sourceSbn.packageName,
                             primaryStatus = smartStatusText,
                             compactOrderCode = routeState.compactOrderCode,
                             parserDictionary = parserDictionary
@@ -452,7 +465,7 @@ object LiveUpdateNotifier {
                             context = context,
                             manager = manager,
                             aggregateKey = smartMatch.aggregateKey,
-                            sbn = sbn,
+                            sbn = sourceSbn,
                             appPresentationOverride = appPresentationOverride,
                             progressOverride = smartProgressOverride,
                             smartRuleId = smartRuleId,
@@ -532,6 +545,10 @@ object LiveUpdateNotifier {
         }
 
         if (source.flags and Notification.FLAG_GROUP_SUMMARY != 0) {
+            return false
+        }
+
+        if (isLikelyMediaPlaybackNotification(source)) {
             return false
         }
 
@@ -1021,6 +1038,9 @@ object LiveUpdateNotifier {
                 if (digits.length !in OTP_CODE_LENGTH) {
                     continue
                 }
+                if (!hasOtpTokenBoundaries(combinedText, match.range.first, match.range.last + 1)) {
+                    continue
+                }
                 if (isLikelyMoneyCandidate(combinedLower, match.range.first, match.range.last + 1, parserDictionary)) {
                     continue
                 }
@@ -1052,6 +1072,18 @@ object LiveUpdateNotifier {
 
     private fun otpSourceKeyForPackage(packageName: String): String {
         return packageName.lowercase(Locale.ROOT)
+    }
+
+    private fun hasOtpTokenBoundaries(
+        text: String,
+        start: Int,
+        endExclusive: Int
+    ): Boolean {
+        val left = if (start > 0) text[start - 1] else null
+        val right = if (endExclusive < text.length) text[endExclusive] else null
+        val leftOk = left == null || !left.isLetterOrDigit()
+        val rightOk = right == null || !right.isLetterOrDigit()
+        return leftOk && rightOk
     }
 
     private fun extractEntityToken(combinedText: String, parserDictionary: LiveParserDictionary): String {
@@ -2432,6 +2464,18 @@ object LiveUpdateNotifier {
             .trim()
     }
 
+    private fun isLikelyMediaPlaybackNotification(notification: Notification): Boolean {
+        if (notification.category == Notification.CATEGORY_TRANSPORT) {
+            return true
+        }
+        val extras = notification.extras
+        if (extras.get(Notification.EXTRA_MEDIA_SESSION) != null) {
+            return true
+        }
+        val template = extras.getString("android.template")
+        return template?.contains("MediaStyle", ignoreCase = true) == true
+    }
+
     private fun resolveAppName(context: Context, packageName: String): String {
         return try {
             val appInfo = context.packageManager.getApplicationInfo(packageName, 0)
@@ -2600,6 +2644,7 @@ object LiveUpdateNotifier {
             val state = aggregateStates[smartAggregateKey]
             if (state != null) {
                 state.activeSbnKeys.remove(sbnKey)
+                state.sourcesBySbnKey.remove(sbnKey)
                 if (state.activeSbnKeys.isEmpty()) {
                     aggregateStates.remove(smartAggregateKey)
                     smartAnimationGenerations.remove(smartAggregateKey)
@@ -2613,6 +2658,38 @@ object LiveUpdateNotifier {
             }
         }
         return idsToCancel
+    }
+
+    private fun selectSmartSourceEntryLocked(
+        aggregateState: AggregateState,
+        keepHighestStage: Boolean
+    ): SmartSourceEntry? {
+        if (aggregateState.sourcesBySbnKey.isEmpty()) {
+            return null
+        }
+        val activeEntries = aggregateState.activeSbnKeys
+            .mapNotNull(aggregateState.sourcesBySbnKey::get)
+        if (activeEntries.isEmpty()) {
+            aggregateState.sourcesBySbnKey.clear()
+            return null
+        }
+        return if (keepHighestStage) {
+            activeEntries.maxWithOrNull(
+                compareBy<SmartSourceEntry>(
+                    { it.stageValue },
+                    { it.postTimeMs },
+                    { it.sbn.key }
+                )
+            )
+        } else {
+            activeEntries.maxWithOrNull(
+                compareBy<SmartSourceEntry>(
+                    { it.postTimeMs },
+                    { it.stageValue },
+                    { it.sbn.key }
+                )
+            )
+        }
     }
 
     private fun clearOtpTrackingForSbnKeyLocked(sbnKey: String): List<Int> {
@@ -2662,7 +2739,15 @@ object LiveUpdateNotifier {
     private data class AggregateState(
         var maxStageSeen: Int,
         val maxStage: Int,
-        val activeSbnKeys: MutableSet<String> = mutableSetOf()
+        val activeSbnKeys: MutableSet<String> = mutableSetOf(),
+        val sourcesBySbnKey: MutableMap<String, SmartSourceEntry> = mutableMapOf()
+    )
+
+    private data class SmartSourceEntry(
+        val stageValue: Int,
+        val postTimeMs: Long,
+        val sbn: StatusBarNotification,
+        val compactOrderCode: String?
     )
 
     private data class OtpAggregateState(
@@ -2689,7 +2774,8 @@ object LiveUpdateNotifier {
         val staleAggregateIds: List<Int>,
         val stageValue: Int,
         val stageMax: Int,
-        val compactOrderCode: String?
+        val compactOrderCode: String?,
+        val sourceSbn: StatusBarNotification
     )
 
     private data class RemoteDrawableAssets(

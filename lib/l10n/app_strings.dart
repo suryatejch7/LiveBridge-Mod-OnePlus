@@ -73,6 +73,13 @@ class AppStrings {
       : 'Grant notification listener access and notifications permission first.';
   String get githubUrl => 'github.com/appsfolder/livebridge';
   String get githubReleasesUrl => 'github.com/appsfolder/livebridge/releases';
+  String get reportBug => isRu ? 'Сообщить о баге' : 'Report a bug';
+  String get bugReportCopied => isRu
+      ? 'Диагностика скопирована в буфер. Вставьте в issue.'
+      : 'Diagnostics copied to clipboard. Paste it into the issue.';
+  String get bugReportCopyFailed => isRu
+      ? 'Не удалось скопировать диагностику.'
+      : 'Failed to copy diagnostics.';
   String get hideWarningBanner => isRu ? 'Скрыть' : 'Hide';
   String get backgroundWarningTitle =>
       isRu ? 'Важно для фоновой работы' : 'Background mode warning';

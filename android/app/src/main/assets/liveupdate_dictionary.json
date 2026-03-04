@@ -25,6 +25,7 @@
       "exclude_patterns": [
         "(с дн[её]м рождения|happy birthday|birthday)",
         "(дарим\\s+скидк|скидк[\\p{L}]*\\s*\\d+%|\\d+%\\s*(скидк|off)|акци[яи]|промокод|promo\\s*code|coupon|cash\\s*back|кэшб[еэ]к)",
+        "(payment\\s*(?:failure|failed|declined|unsuccessful)|оплат[аы][^\\n]*(?:не\\s*прошл|ошибк|отклон|не\\s*успеш)|неудачн[а-я\\s]*оплат)",
         "(при\\s+заказе\\s+от\\s*\\d|order\\s+from\\s*\\d)",
         "(почт[аы]\\s+росси|посыл(?:к|ок)|маркетплейс|отделени[ея]|трек-?номер|tracking|shipment|parcel|пункт\\s*выдачи)"
       ],
@@ -235,10 +236,18 @@
     "otp",
     "one-time password",
     "one time password",
+    "verification",
     "verification code",
+    "verify code",
+    "code verification",
     "confirmation code",
     "confirm code",
+    "authentication code",
+    "authorization code",
     "security code",
+    "sign in code",
+    "signin code",
+    "login verification code",
     "login code",
     "account code",
     "payment code",
@@ -247,11 +256,20 @@
     "auth code",
     "sms code",
     "код подтверждения",
+    "код подтверждения входа",
     "код для подтверждения",
+    "код проверки",
+    "проверочный код",
+    "код верификации",
+    "код авторизации",
+    "код безопасности",
     "код входа",
+    "код для входа в аккаунт",
+    "код для подтверждения входа",
     "код для входа",
     "код для добавления",
     "код для добавления устройства",
+    "код подтверждения операции",
     "код оплаты",
     "код аккаунта",
     "одноразовый",
@@ -364,8 +382,8 @@
     "отправ"
   ],
   "otp_code_patterns": [
-    "(?<!\\d)(\\d{4,8})(?!\\d)",
-    "(?<!\\d)(\\d(?:[\\s-]?\\d){3,7})(?!\\d)"
+    "(?<!\\S)(\\d{4,8})(?!\\S)",
+    "(?<!\\S)(\\d(?:[\\s-]?\\d){3,7})(?!\\S)"
   ],
   "order_context_hints": ["заказ", "order", "delivery", "достав"],
   "entity_token_patterns": [

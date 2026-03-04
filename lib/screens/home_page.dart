@@ -26,6 +26,8 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
       'https://github.com/appsfolder/livebridge';
   static const String _projectGithubReleasesUrl =
       'https://github.com/appsfolder/livebridge/releases';
+  static const String _projectGithubBugReportUrl =
+      'https://github.com/appsfolder/livebridge/issues/new?template=bug_report.md&title=%5BBug%5D%20';
   static const String _latestReleaseApiUrl =
       'https://api.github.com/repos/appsfolder/livebridge/releases/latest';
   static const String _dictionaryRawUrl =
@@ -1066,6 +1068,129 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     }
   }
 
+  List<String> _parseRulesText(String raw) {
+    return raw
+        .split(RegExp(r'[\s,\n\r\t;]+'))
+        .map((String item) => item.trim())
+        .where((String item) => item.isNotEmpty)
+        .toList();
+  }
+
+  Future<String> _buildBugReportDiagnosticsJson({
+    required String localeTag,
+  }) async {
+    final DateTime now = DateTime.now();
+    final DeviceInfo deviceInfo = await LiveBridgePlatform.getDeviceInfo();
+    final String appPresentationOverridesRaw =
+        await LiveBridgePlatform.getAppPresentationOverrides();
+
+    final List<String> packageRules = _parseRulesText(_rulesController.text);
+    final List<String> otpPackageRules = _parseRulesText(
+      _otpRulesController.text,
+    );
+    final List<String> expandedSections = _expandedSections.toList()..sort();
+
+    final Map<String, dynamic> payload = <String, dynamic>{
+      'schema': 'livebridge_bug_report_v1',
+      'generated_at_utc': now.toUtc().toIso8601String(),
+      'generated_at_local': now.toIso8601String(),
+      'timezone_name': now.timeZoneName,
+      'timezone_offset_minutes': now.timeZoneOffset.inMinutes,
+      'locale': localeTag,
+      'platform': <String, dynamic>{
+        'os': Platform.operatingSystem,
+        'os_version': Platform.operatingSystemVersion,
+      },
+      'app': <String, dynamic>{
+        'version': _currentAppVersion,
+        'latest_release_version': _latestReleaseVersion,
+        'update_available': _updateAvailable,
+      },
+      'device': <String, dynamic>{
+        'label': deviceInfo.label,
+        'manufacturer': deviceInfo.manufacturer,
+        'brand': deviceInfo.brand,
+        'market_name': deviceInfo.marketName,
+        'model': deviceInfo.model,
+        'raw_model': deviceInfo.rawModel,
+        'product': deviceInfo.product,
+        'display': deviceInfo.display,
+        'fingerprint': deviceInfo.fingerprint,
+        'is_pixel': deviceInfo.isPixel,
+        'is_samsung': deviceInfo.isSamsung,
+        'is_aosp_device': deviceInfo.isAospDevice,
+        'hide_live_updates_promotion':
+            deviceInfo.shouldHideLiveUpdatesPromotion,
+      },
+      'permissions': <String, dynamic>{
+        'listener_enabled': _listenerEnabled,
+        'notifications_granted': _notificationsGranted,
+        'can_post_promoted': _canPostPromoted,
+      },
+      'settings': <String, dynamic>{
+        'converter_enabled': _converterEnabled,
+        'keep_alive_foreground_enabled': _keepAliveForegroundEnabled,
+        'update_checks_enabled': _updateChecksEnabled,
+        'only_with_progress': _onlyWithProgress,
+        'text_progress_enabled': _textProgressEnabled,
+        'smart_detection_enabled': _smartDetectionEnabled,
+        'smart_navigation_enabled': _smartNavigationEnabled,
+        'smart_weather_enabled': _smartWeatherEnabled,
+        'smart_external_devices_enabled': _smartExternalDevicesEnabled,
+        'smart_vpn_enabled': _smartVpnEnabled,
+        'otp_detection_enabled': _otpDetectionEnabled,
+        'otp_auto_copy_enabled': _otpAutoCopyEnabled,
+        'aosp_cutting_enabled': _aospCuttingEnabled,
+        'animated_island_enabled': _animatedIslandEnabled,
+        'hyper_bridge_enabled': _hyperBridgeEnabled,
+      },
+      'rules': <String, dynamic>{
+        'package_mode': _packageMode.id,
+        'package_rules': packageRules,
+        'package_rules_count': packageRules.length,
+        'otp_package_mode': _otpPackageMode.id,
+        'otp_package_rules': otpPackageRules,
+        'otp_package_rules_count': otpPackageRules.length,
+      },
+      'additional_state': <String, dynamic>{
+        'has_custom_parser_dictionary': _hasCustomParserDictionary,
+        'app_presentation_overrides_length': appPresentationOverridesRaw.length,
+        'expanded_sections': expandedSections,
+      },
+    };
+
+    return const JsonEncoder.withIndent('  ').convert(payload);
+  }
+
+  Future<bool> _copyBugReportDiagnosticsToClipboard() async {
+    try {
+      final String localeTag = Localizations.localeOf(context).toLanguageTag();
+      final String payload = await _buildBugReportDiagnosticsJson(
+        localeTag: localeTag,
+      );
+      await Clipboard.setData(ClipboardData(text: payload));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _openBugReport() async {
+    final AppStrings s = AppStrings.of(context);
+    final bool copied = await _copyBugReportDiagnosticsToClipboard();
+    if (mounted) {
+      _snack(copied ? s.bugReportCopied : s.bugReportCopyFailed);
+    }
+    final Uri uri = Uri.parse(_projectGithubBugReportUrl);
+    final bool opened = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      _snack(AppStrings.of(context).githubOpenFailed);
+    }
+  }
+
   Future<void> _hideBackgroundWarning() async {
     HapticFeedback.selectionClick();
     await LiveBridgePlatform.setBackgroundWarningDismissed(true);
@@ -1536,6 +1661,15 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
                   ),
                 ],
               ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _openBugReport,
+              icon: const Icon(Icons.bug_report_rounded, size: 18),
+              label: Text(s.reportBug),
             ),
           ),
         ],

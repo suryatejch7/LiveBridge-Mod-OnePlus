@@ -53,6 +53,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
   bool _canPostPromoted = false;
   bool _converterEnabled = true;
   bool _keepAliveForegroundEnabled = false;
+  bool _networkSpeedEnabled = false;
   bool _syncDndEnabled = false;
   bool _aospCuttingEnabled = false;
   bool _animatedIslandEnabled = false;
@@ -199,6 +200,8 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
           await LiveBridgePlatform.getConverterEnabled();
       final bool keepAliveForegroundEnabled =
           await LiveBridgePlatform.getKeepAliveForegroundEnabled();
+      final bool networkSpeedEnabled =
+          await LiveBridgePlatform.getNetworkSpeedEnabled();
       final bool syncDndEnabled = await LiveBridgePlatform.getSyncDndEnabled();
       final bool aospCuttingEnabled =
           await LiveBridgePlatform.getAospCuttingEnabled();
@@ -298,6 +301,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
         _canPostPromoted = canPostPromoted;
         _converterEnabled = converterEnabled;
         _keepAliveForegroundEnabled = keepAliveForegroundEnabled;
+        _networkSpeedEnabled = networkSpeedEnabled;
         _syncDndEnabled = syncDndEnabled;
         _aospCuttingEnabled = aospCuttingEnabled;
         _animatedIslandEnabled = animatedIslandEnabled;
@@ -401,6 +405,12 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     LiveBridgeHaptics.toggle(value);
     setState(() => _keepAliveForegroundEnabled = value);
     await LiveBridgePlatform.setKeepAliveForegroundEnabled(value);
+  }
+
+  Future<void> _setNetworkSpeedEnabled(bool value) async {
+    LiveBridgeHaptics.toggle(value);
+    setState(() => _networkSpeedEnabled = value);
+    await LiveBridgePlatform.setNetworkSpeedEnabled(value);
   }
 
   Future<void> _setSyncDnd(bool value) async {
@@ -1238,6 +1248,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
       'settings': <String, dynamic>{
         'converter_enabled': _converterEnabled,
         'keep_alive_foreground_enabled': _keepAliveForegroundEnabled,
+        'network_speed_enabled': _networkSpeedEnabled,
         'sync_dnd_enabled': _syncDndEnabled,
         'update_checks_enabled': _updateChecksEnabled,
         'only_with_progress': _onlyWithProgress,
@@ -2376,6 +2387,26 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
               _smartDetectionEnabled
                   ? s.smartVpnSubtitle
                   : s.smartNavigationDisabledSubtitle,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 13,
+              ),
+            ),
+            contentPadding: EdgeInsets.zero,
+            activeThumbColor: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile.adaptive(
+            value: _networkSpeedEnabled,
+            onChanged: _setNetworkSpeedEnabled,
+            title: Text(
+              s.networkSpeedTitle,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              _converterEnabled
+                  ? s.networkSpeedSubtitle
+                  : s.networkSpeedInactiveSubtitle,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
                 fontSize: 13,

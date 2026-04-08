@@ -115,6 +115,13 @@ class AppStrings {
   String get keepAliveForegroundInactiveSubtitle => isRu
       ? 'Включите LiveBridge, чтобы режим начал работать.'
       : 'Enable the LiveBridge for this mode to take effect.';
+  String get networkSpeedTitle => isRu ? 'Скорость сети' : 'Network speed';
+  String get networkSpeedSubtitle => isRu
+      ? 'Показывает загрузку и отдачу как отдельный Live Update в статус-баре.'
+      : 'Shows current download and upload as a separate Live Update in the status bar.';
+  String get networkSpeedInactiveSubtitle => isRu
+      ? 'Включите LiveBridge, чтобы монитор скорости начал работать.'
+      : 'Enable LiveBridge for the network speed monitor to start working.';
   String get syncDndTitle => isRu ? 'Синхронизировать DnD' : 'Sync DnD';
   String get syncDndSubtitle => isRu
       ? 'Если на смартфоне включен режим Не беспокоить, уведомления LiveBridge не показываются.'

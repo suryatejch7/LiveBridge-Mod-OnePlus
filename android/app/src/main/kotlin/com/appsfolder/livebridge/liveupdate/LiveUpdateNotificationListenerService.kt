@@ -10,6 +10,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
+import com.appsfolder.livebridge.liveupdate.networkspeed.NetworkSpeedController
 import kotlin.math.min
 
 class LiveUpdateNotificationListenerService : NotificationListenerService() {
@@ -59,6 +60,7 @@ class LiveUpdateNotificationListenerService : NotificationListenerService() {
         super.onCreate()
 
         if (isBlockedByJoke()) {
+            NetworkSpeedController.sync(applicationContext, prefs)
             NotificationManagerCompat.from(applicationContext).cancelAll()
             return
         }
@@ -68,6 +70,7 @@ class LiveUpdateNotificationListenerService : NotificationListenerService() {
         }
 
         LiveUpdateNotifier.ensureChannel(applicationContext)
+        NetworkSpeedController.sync(applicationContext, prefs)
         scheduleSnapshotSync()
     }
 
@@ -75,6 +78,7 @@ class LiveUpdateNotificationListenerService : NotificationListenerService() {
         super.onListenerConnected()
         rebindAttempts = 0
         rebindScheduled = false
+        NetworkSpeedController.sync(applicationContext, prefs)
 
         if (isBlockedByJoke()) {
             return
@@ -112,6 +116,7 @@ class LiveUpdateNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
+        NetworkSpeedController.sync(applicationContext, prefs)
         if (isBlockedByJoke()) {
             return
         }

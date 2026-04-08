@@ -72,12 +72,20 @@ class ConverterPrefs(context: Context) {
         return prefs.getBoolean(KEY_KEEP_ALIVE_FOREGROUND_ENABLED, false)
     }
 
+    fun getNetworkSpeedEnabled(): Boolean {
+        return prefs.getBoolean(KEY_NETWORK_SPEED_ENABLED, false)
+    }
+
     fun hasKeepAliveForegroundPreference(): Boolean {
         return prefs.contains(KEY_KEEP_ALIVE_FOREGROUND_ENABLED)
     }
 
     fun setKeepAliveForegroundEnabled(value: Boolean) {
         prefs.edit().putBoolean(KEY_KEEP_ALIVE_FOREGROUND_ENABLED, value).apply()
+    }
+
+    fun setNetworkSpeedEnabled(value: Boolean) {
+        prefs.edit().putBoolean(KEY_NETWORK_SPEED_ENABLED, value).apply()
     }
 
     fun getSyncDndEnabled(): Boolean {
@@ -379,6 +387,7 @@ class ConverterPrefs(context: Context) {
         private const val KEY_TEXT_PROGRESS_ENABLED = "text_progress_enabled"
         private const val KEY_CONVERTER_ENABLED = "converter_enabled"
         private const val KEY_KEEP_ALIVE_FOREGROUND_ENABLED = "keep_alive_foreground_enabled"
+        private const val KEY_NETWORK_SPEED_ENABLED = "network_speed_enabled"
         private const val KEY_SYNC_DND_ENABLED = "sync_dnd_enabled"
         private const val KEY_UPDATE_CHECKS_ENABLED = "update_checks_enabled"
         private const val KEY_UPDATE_LAST_CHECK_AT_MS = "update_last_check_at_ms"

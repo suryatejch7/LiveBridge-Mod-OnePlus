@@ -40,6 +40,7 @@ import com.appsfolder.livebridge.liveupdate.LiveParserDictionary
 import com.appsfolder.livebridge.liveupdate.LiveParserDictionaryLoader
 import com.appsfolder.livebridge.liveupdate.LiveUpdateNotifier
 import com.appsfolder.livebridge.liveupdate.LiveUpdateNotificationListenerService
+import com.appsfolder.livebridge.liveupdate.networkspeed.NetworkSpeedController
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
@@ -69,6 +70,7 @@ class MainActivity : FlutterActivity() {
         val prefs = ConverterPrefs(applicationContext)
         initializeKeepAliveDefaultIfNeeded(prefs)
         syncKeepAliveForegroundService(prefs)
+        syncNetworkSpeedForegroundService(prefs)
         clearDynamicLauncherShortcuts()
         LiveBridgeTileService.requestStateSync(applicationContext)
     }
@@ -258,6 +260,18 @@ class MainActivity : FlutterActivity() {
                 val value = call.argument<Boolean>("value") ?: false
                 prefs.setKeepAliveForegroundEnabled(value)
                 syncKeepAliveForegroundService(prefs)
+                res.success(true)
+            }
+
+            "getNetworkSpeedEnabled" -> {
+                syncNetworkSpeedForegroundService(prefs)
+                res.success(prefs.getNetworkSpeedEnabled())
+            }
+
+            "setNetworkSpeedEnabled" -> {
+                val value = call.argument<Boolean>("value") ?: false
+                prefs.setNetworkSpeedEnabled(value)
+                syncNetworkSpeedForegroundService(prefs)
                 res.success(true)
             }
 
@@ -451,6 +465,10 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun syncNetworkSpeedForegroundService(prefs: ConverterPrefs) {
+        NetworkSpeedController.sync(applicationContext, prefs)
+    }
+
     private fun initializeKeepAliveDefaultIfNeeded(prefs: ConverterPrefs) {
         if (prefs.hasKeepAliveForegroundPreference()) {
             return
@@ -469,6 +487,7 @@ class MainActivity : FlutterActivity() {
             requestNotificationListenerRebind()
         }
         syncKeepAliveForegroundService(prefs)
+        syncNetworkSpeedForegroundService(prefs)
         LiveBridgeTileService.requestStateSync(applicationContext)
     }
 

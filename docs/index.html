@@ -29,6 +29,9 @@
         --on-primary-container: #00201D;
         --outline: rgba(13, 148, 136, 0.3);
         --border: rgba(26, 33, 32, 0.1);
+        --hero-glow-core: rgba(13, 148, 136, 0.2);
+        --hero-glow-soft: rgba(13, 148, 136, 0.1);
+        --hero-glow-secondary: rgba(153, 246, 228, 0.2);
         --radius: 16px;
         --max: 1100px;
       }
@@ -47,6 +50,9 @@
           --on-primary-container: #A8FFF4;
           --outline: rgba(103, 231, 217, 0.45);
           --border: #223636;
+          --hero-glow-core: rgba(103, 231, 217, 0.24);
+          --hero-glow-soft: rgba(103, 231, 217, 0.12);
+          --hero-glow-secondary: rgba(12, 94, 85, 0.34);
         }
       }
 
@@ -161,8 +167,10 @@
       }
 
       .hero-visual {
+        position: relative;
         display: flex;
         justify-content: flex-end;
+        overflow: visible;
       }
 
       .hero-scroll-wrap {
@@ -306,6 +314,35 @@
 
       .hero-picture {
         max-width: 352px;
+        position: relative;
+        isolation: isolate;
+        overflow: visible;
+      }
+
+      .hero-picture::before,
+      .hero-picture::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 52%;
+        border-radius: 50%;
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+        z-index: -1;
+      }
+
+      .hero-picture::before {
+        width: 122%;
+        aspect-ratio: 1;
+        background: radial-gradient(circle, var(--hero-glow-core) 0%, var(--hero-glow-soft) 42%, transparent 74%);
+        filter: blur(18px);
+      }
+
+      .hero-picture::after {
+        width: 94%;
+        aspect-ratio: 1;
+        background: radial-gradient(circle, var(--hero-glow-secondary) 0%, transparent 72%);
+        filter: blur(32px);
       }
 
       .showcase-img {
@@ -314,6 +351,8 @@
         height: auto;
         display: block;
         border-radius: 24px;
+        position: relative;
+        z-index: 1;
       }
 
       .downloads {
@@ -411,6 +450,7 @@
         width: auto;
         height: 16px;
         opacity: 0.8;
+        transform: translateY(1px);
       }
 
       .build-tag {
@@ -476,42 +516,89 @@
         margin: 0 auto;
       }
 
-      details {
+      .faq-item {
         background-color: var(--surface);
         border: 1px solid var(--border);
         border-radius: var(--radius);
         margin-bottom: 12px;
+        transition: border-color 180ms ease, background-color 180ms ease, transform 180ms ease;
       }
 
-      summary {
+      .faq-item.is-open {
+        border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
+      }
+
+      .faq-trigger {
+        width: 100%;
+        background: transparent;
+        border: 0;
         padding: 20px 24px;
         font-weight: 500;
         font-size: 1.05rem;
         cursor: pointer;
-        list-style: none;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 16px;
+        color: var(--text);
+        text-align: left;
+        font-family: inherit;
       }
 
-      summary::-webkit-details-marker {
-        display: none;
+      .faq-trigger:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--primary) 55%, white);
+        outline-offset: -2px;
+        border-radius: var(--radius);
       }
 
-      summary::after {
-        content: '+';
-        font-size: 1.25rem;
-        color: var(--primary);
+      .faq-chevron {
+        width: 10px;
+        height: 10px;
+        flex: 0 0 auto;
+        border-right: 2px solid var(--primary);
+        border-bottom: 2px solid var(--primary);
+        transform: rotate(45deg);
+        transition: transform 220ms ease;
       }
 
-      details[open] summary::after {
-        content: '−';
+      .faq-item.is-open .faq-chevron {
+        transform: rotate(225deg);
       }
 
-      details p {
+      .faq-panel {
+        height: 0;
+        overflow: hidden;
+        opacity: 0;
+        transition: height 220ms ease, opacity 180ms ease;
+      }
+
+      .faq-panel-inner {
         padding: 0 24px 24px;
+      }
+
+      .faq-panel-inner p {
         margin: 0;
         color: var(--text-muted);
+      }
+
+      .faq-panel-inner a {
+        color: var(--primary);
+        font-weight: 500;
+        text-decoration: underline;
+        text-decoration-color: color-mix(in srgb, var(--primary) 55%, transparent);
+        text-underline-offset: 0.18em;
+      }
+
+      .faq-panel-inner a:hover {
+        text-decoration-color: var(--primary);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .faq-item,
+        .faq-chevron,
+        .faq-panel {
+          transition: none;
+        }
       }
 
       .footer {
@@ -796,12 +883,13 @@
         }
 
         .build-title-row {
-          align-items: flex-start;
+          align-items: center;
           gap: 8px;
         }
 
         .samsung-logo-img {
           height: 14px;
+          transform: translateY(1px);
         }
 
         .download-banner {
@@ -821,13 +909,17 @@
           padding: 42px 0 34px;
         }
 
-        summary {
+        .faq-trigger {
           padding: 18px 20px;
           font-size: 1rem;
         }
 
-        details p {
+        .faq-panel-inner {
           padding: 0 20px 20px;
+        }
+
+        .faq-panel-inner p {
+          padding: 0;
         }
 
         .footer {
@@ -1086,18 +1178,72 @@
             <h2>FAQ</h2>
           </div>
 
-          <details open>
-            <summary>Which APK should most people download?</summary>
-            <p>The ARMv8-A build is the default choice for nearly every recent Android phone. If your device is from the last several years, start there.</p>
-          </details>
-          <details>
-            <summary>Why is there a separate Samsung build?</summary>
-            <p>The Samsung build is meant for the Samsung-specific package-name replacement flow, which helps with the vendor-specific Now Bar setup.</p>
-          </details>
-          <details>
-            <summary>Will this work on older Android versions?</summary>
-            <p>No. LiveBridge targets Android 16 and newer because the app is built around native Android Live Updates support.</p>
-          </details>
+          <div class="faq-item is-open" data-faq-item>
+            <button class="faq-trigger" type="button" aria-expanded="true" aria-controls="faq-most-people">
+              <span>Which APK should most people download?</span>
+              <span class="faq-chevron" aria-hidden="true"></span>
+            </button>
+            <div class="faq-panel" id="faq-most-people" data-faq-panel>
+              <div class="faq-panel-inner">
+                <p>The ARMv8-A build is the default choice for nearly every recent Android phone. If your device is from the last several years, start there.</p>
+              </div>
+            </div>
+          </div>
+          <div class="faq-item" data-faq-item>
+            <button class="faq-trigger" type="button" aria-expanded="false" aria-controls="faq-samsung-build">
+              <span>Why is there a separate Samsung build?</span>
+              <span class="faq-chevron" aria-hidden="true"></span>
+            </button>
+            <div class="faq-panel" id="faq-samsung-build" data-faq-panel>
+              <div class="faq-panel-inner">
+                <p>The Samsung build is meant for the Samsung-specific package-name replacement flow, which helps with the vendor-specific Now Bar setup.</p>
+              </div>
+            </div>
+          </div>
+          <div class="faq-item" data-faq-item>
+            <button class="faq-trigger" type="button" aria-expanded="false" aria-controls="faq-internet-access">
+              <span>Why does the app need internet access?</span>
+              <span class="faq-chevron" aria-hidden="true"></span>
+            </button>
+            <div class="faq-panel" id="faq-internet-access" data-faq-panel>
+              <div class="faq-panel-inner">
+                <p>LiveBridge uses internet access for things like checking for new releases and dictionary updates. Its core job of turning notifications into Live Updates happens locally on your device.</p>
+              </div>
+            </div>
+          </div>
+          <div class="faq-item" data-faq-item>
+            <button class="faq-trigger" type="button" aria-expanded="false" aria-controls="faq-safety">
+              <span>Is the app safe?</span>
+              <span class="faq-chevron" aria-hidden="true"></span>
+            </button>
+            <div class="faq-panel" id="faq-safety" data-faq-panel>
+              <div class="faq-panel-inner">
+                <p>LiveBridge is open source and does not require an account. You can inspect the code, review the permissions it asks for, and verify what it does before installing it. Notification processing stays on-device.</p>
+              </div>
+            </div>
+          </div>
+          <div class="faq-item" data-faq-item>
+            <button class="faq-trigger" type="button" aria-expanded="false" aria-controls="faq-contact">
+              <span>How can I contact the developer?</span>
+              <span class="faq-chevron" aria-hidden="true"></span>
+            </button>
+            <div class="faq-panel" id="faq-contact" data-faq-panel>
+              <div class="faq-panel-inner">
+                <p>You can reach the developer on Telegram: <a href="https://t.me/appsfolder" target="_blank" rel="noreferrer">@appsfolder</a>.</p>
+              </div>
+            </div>
+          </div>
+          <div class="faq-item" data-faq-item>
+            <button class="faq-trigger" type="button" aria-expanded="false" aria-controls="faq-older-android">
+              <span>Will this work on older Android versions?</span>
+              <span class="faq-chevron" aria-hidden="true"></span>
+            </button>
+            <div class="faq-panel" id="faq-older-android" data-faq-panel>
+              <div class="faq-panel-inner">
+                <p>No. LiveBridge targets Android 16 and newer because the app is built around native Android Live Updates support.</p>
+              </div>
+            </div>
+          </div>
         </section>
       </main>
 
@@ -1250,6 +1396,84 @@
         });
       }
 
+      function initFaqAccordion() {
+        const items = document.querySelectorAll("[data-faq-item]");
+
+        function getPanelHeight(panel) {
+          return `${Math.ceil(panel.scrollHeight + 1)}px`;
+        }
+
+        function setInitialState(item) {
+          const button = item.querySelector(".faq-trigger");
+          const panel = item.querySelector("[data-faq-panel]");
+          const isOpen = item.classList.contains("is-open");
+
+          if (!button || !panel) return;
+
+          button.setAttribute("aria-expanded", String(isOpen));
+          panel.hidden = !isOpen;
+          panel.style.opacity = isOpen ? "1" : "0";
+          panel.style.height = isOpen ? "auto" : "0px";
+        }
+
+        function openItem(item, button, panel) {
+          item.classList.add("is-open");
+          button.setAttribute("aria-expanded", "true");
+          panel.hidden = false;
+          panel.style.height = "0px";
+          panel.style.opacity = "0";
+
+          requestAnimationFrame(() => {
+            panel.style.height = getPanelHeight(panel);
+            panel.style.opacity = "1";
+          });
+
+          const onTransitionEnd = (event) => {
+            if (event.propertyName !== "height") return;
+            panel.style.height = "auto";
+            panel.removeEventListener("transitionend", onTransitionEnd);
+          };
+
+          panel.addEventListener("transitionend", onTransitionEnd);
+        }
+
+        function closeItem(item, button, panel) {
+          panel.style.height = getPanelHeight(panel);
+          panel.style.opacity = "1";
+
+          requestAnimationFrame(() => {
+            item.classList.remove("is-open");
+            button.setAttribute("aria-expanded", "false");
+            panel.style.height = "0px";
+            panel.style.opacity = "0";
+          });
+
+          const onTransitionEnd = (event) => {
+            if (event.propertyName !== "height") return;
+            panel.hidden = true;
+            panel.removeEventListener("transitionend", onTransitionEnd);
+          };
+
+          panel.addEventListener("transitionend", onTransitionEnd);
+        }
+
+        items.forEach((item) => {
+          setInitialState(item);
+
+          const button = item.querySelector(".faq-trigger");
+          const panel = item.querySelector("[data-faq-panel]");
+          if (!button || !panel) return;
+
+          button.addEventListener("click", () => {
+            if (item.classList.contains("is-open")) {
+              closeItem(item, button, panel);
+            } else {
+              openItem(item, button, panel);
+            }
+          });
+        });
+      }
+
       async function loadReleaseData() {
         const versionEl = document.getElementById("stat-version");
         const totalDownloadsEl = document.getElementById("stat-total-downloads");
@@ -1343,6 +1567,7 @@
 
       hydrateThemeAwareScreenshots();
       hydrateStaticIcons();
+      initFaqAccordion();
       applyRecommendedBuild(looksLikeSamsungDevice() ? "samsung" : defaultRecommendedBuild);
       loadReleaseData();
     </script>

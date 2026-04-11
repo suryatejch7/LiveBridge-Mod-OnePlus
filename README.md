@@ -106,3 +106,4 @@ For stable behavior, the app usually needs:
 
 - [D4vidDf](https://github.com/D4vidDf/HyperIsland-ToolKit) for the Hyper Island toolkit
 - [RossSihovsk](https://github.com/RossSihovsk/LiveMedia) for the Live Media
+- [realMoai](https://github.com/realMoai/NowbarMeter) & [Mystery00](https://github.com/Mystery00/PixelMeter) for the Network stats

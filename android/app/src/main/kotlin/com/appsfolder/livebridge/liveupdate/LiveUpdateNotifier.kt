@@ -40,6 +40,7 @@ import kotlin.random.Random
 
 object LiveUpdateNotifier {
     const val CHANNEL_ID = "livebridge_promoted_updates"
+    private const val TWO_GIS_PACKAGE = "ru.dublgis.dgismobile"
 
     private const val CHANNEL_NAME = "LiveBridge Updates"
     private const val TAG = "LiveUpdateNotifier"
@@ -194,7 +195,7 @@ object LiveUpdateNotifier {
                 return false
             }
             val source = sbn.notification
-            val hasNativeProgress = hasProgress(source)
+            val hasNativeProgress = hasEffectiveProgress(sbn.packageName, source)
             val animatedIslandEnabled = prefs.getAnimatedIslandEnabled()
             val isMediaPlaybackNotification = mediaPlaybackSmartEnabled &&
                     isLikelyMediaPlaybackNotification(source)
@@ -680,7 +681,10 @@ object LiveUpdateNotifier {
             return false
         }
 
-        if (parserDictionary.blockedSourcePackages.contains(sbn.packageName.lowercase(Locale.ROOT))) {
+        val packageNameLower = sbn.packageName.lowercase(Locale.ROOT)
+        if (parserDictionary.blockedSourcePackages.contains(packageNameLower) &&
+            packageNameLower != TWO_GIS_PACKAGE
+        ) {
             return false
         }
 
@@ -691,6 +695,7 @@ object LiveUpdateNotifier {
         appPackageName: String,
         sbn: StatusBarNotification
     ): Boolean {
+        val packageNameLower = sbn.packageName.lowercase(Locale.ROOT)
         if (appPackageName.isNotEmpty() && sbn.packageName == appPackageName) {
             return false
         }
@@ -701,7 +706,9 @@ object LiveUpdateNotifier {
         if (Build.VERSION.SDK_INT >= 36 && source.flags and 0x40000 != 0) {
             return false
         }
-        if (source.flags and Notification.FLAG_GROUP_SUMMARY != 0) {
+        if (source.flags and Notification.FLAG_GROUP_SUMMARY != 0 &&
+            packageNameLower != TWO_GIS_PACKAGE
+        ) {
             return false
         }
         return true
@@ -727,11 +734,15 @@ object LiveUpdateNotifier {
         val runtimePrefs = ConverterPrefs(context)
         val parserDictionary = LiveParserDictionaryLoader.get(context, runtimePrefs)
         val source = sbn.notification
+        val sourcePackageNameLower = sbn.packageName.lowercase(Locale.ROOT)
+        val isTwoGisPackage = sourcePackageNameLower == TWO_GIS_PACKAGE
         val sourceSmallIcon = resolveSourceSmallIcon(context, sbn)
         val appSmallIcon = resolveAppSmallIcon(context, sbn.packageName)
         val shouldTryNavigationArrowIcon =
-            appPresentationOverride.iconSource == NotificationIconSource.NOTIFICATION &&
+            (appPresentationOverride.iconSource == NotificationIconSource.NOTIFICATION ||
+                    isTwoGisPackage) &&
                     (smartRuleId == "navigation" ||
+                            isTwoGisPackage ||
                             (allowNavigationIconHeuristics &&
                                     isLikelyNavigationPackage(sbn.packageName, parserDictionary)))
         val navigationDrawable =
@@ -776,7 +787,8 @@ object LiveUpdateNotifier {
         } else {
             source.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false)
         }
-        val hasProgress = progressOverride != null || hasProgress(source)
+        val hasProgress = progressOverride != null ||
+                hasEffectiveProgress(sbn.packageName, source)
         val determinateProgressPercent = if (hasProgress && !indeterminate && progressMax > 0) {
             val safeMax = progressMax.coerceAtLeast(1)
             val safeProgress = progressValue.coerceIn(0, safeMax)
@@ -802,8 +814,14 @@ object LiveUpdateNotifier {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
 
         val preferredSmallIcon = when (appPresentationOverride.iconSource) {
-            NotificationIconSource.NOTIFICATION -> navigationDrawable?.icon ?: sourceSmallIcon ?: appSmallIcon
-            NotificationIconSource.APP -> appSmallIcon ?: sourceSmallIcon
+            NotificationIconSource.NOTIFICATION ->
+                navigationDrawable?.icon ?: sourceSmallIcon ?: appSmallIcon
+            NotificationIconSource.APP ->
+                if (isTwoGisPackage) {
+                    navigationDrawable?.icon ?: appSmallIcon ?: sourceSmallIcon
+                } else {
+                    appSmallIcon ?: sourceSmallIcon
+                }
         }
         applySmallIcon(context, builder, preferredSmallIcon)
         preferredLargeIcon?.let(builder::setLargeIcon)
@@ -1122,6 +1140,10 @@ object LiveUpdateNotifier {
         source: Notification,
         parserDictionary: LiveParserDictionary
     ): TextProgressMatch? {
+        if (isLikelyNavigationPackage(packageName, parserDictionary)) {
+            return null
+        }
+
         val combinedText = collectNotificationText(
             notification = source,
             fallbackTitle = packageName,
@@ -2693,6 +2715,32 @@ object LiveUpdateNotifier {
         return max > 0 || indeterminate
     }
 
+    private fun hasEffectiveProgress(
+        sourcePackageName: String,
+        notification: Notification
+    ): Boolean {
+        if (!hasProgress(notification)) {
+            return false
+        }
+        return !shouldIgnoreNativeProgress(sourcePackageName, notification)
+    }
+
+    private fun shouldIgnoreNativeProgress(
+        sourcePackageName: String,
+        notification: Notification
+    ): Boolean {
+        if (sourcePackageName.lowercase(Locale.ROOT) != TWO_GIS_PACKAGE) {
+            return false
+        }
+        val extras = notification.extras
+        val progressMax = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
+        val progressValue = extras.getInt(Notification.EXTRA_PROGRESS, 0)
+        val indeterminate = extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false)
+        return !indeterminate &&
+                progressMax == 100 &&
+                progressValue in 0..100
+    }
+
     private fun extractTitle(
         notification: Notification,
         fallbackName: String,
@@ -2953,6 +3001,9 @@ object LiveUpdateNotifier {
         parserDictionary: LiveParserDictionary
     ): Boolean {
         val packageLower = packageName.lowercase(Locale.ROOT)
+        if (packageLower == TWO_GIS_PACKAGE) {
+            return true
+        }
         if (parserDictionary.knownNavigationPackages.contains(packageLower)) {
             return true
         }

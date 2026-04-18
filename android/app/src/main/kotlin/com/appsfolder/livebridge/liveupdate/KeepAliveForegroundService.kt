@@ -87,11 +87,15 @@ class KeepAliveForegroundService : Service() {
                             
                         // Skip "Disconnected" alert if Wi-Fi is actively turning off or already off.
                         // The WIFI_STATE_CHANGED_ACTION will emit the "OFF" event instead.
-                        if (wifiManager != null) {
-                            val state = wifiManager.wifiState
-                            if (state == WifiManager.WIFI_STATE_DISABLING || state == WifiManager.WIFI_STATE_DISABLED) {
-                                return
+                        try {
+                            if (wifiManager != null) {
+                                val state = wifiManager.wifiState
+                                if (state == WifiManager.WIFI_STATE_DISABLING || state == WifiManager.WIFI_STATE_DISABLED) {
+                                    return
+                                }
                             }
+                        } catch (_: Exception) {
+                            // Safely ignore missing permissions or IPC failures
                         }
                         
                         val networkInfo = intent.getParcelableExtra<NetworkInfo>(WifiManager.EXTRA_NETWORK_INFO)

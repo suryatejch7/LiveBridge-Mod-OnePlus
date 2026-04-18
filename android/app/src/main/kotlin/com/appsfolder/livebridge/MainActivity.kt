@@ -117,6 +117,26 @@ class MainActivity : FlutterActivity() {
                 prefs.setAppListAccessGranted(call.argument<Boolean>("value") ?: false)
                 res.success(true)
             }
+            "getEventsBluetoothEnabled" -> res.success(prefs.getEventsBluetoothEnabled())
+            "setEventsBluetoothEnabled" -> {
+                prefs.setEventsBluetoothEnabled(call.argument<Boolean>("value") ?: true)
+                res.success(true)
+            }
+            "getEventsWifiEnabled" -> res.success(prefs.getEventsWifiEnabled())
+            "setEventsWifiEnabled" -> {
+                prefs.setEventsWifiEnabled(call.argument<Boolean>("value") ?: true)
+                res.success(true)
+            }
+            "getEventsAirplaneModeEnabled" -> res.success(prefs.getEventsAirplaneModeEnabled())
+            "setEventsAirplaneModeEnabled" -> {
+                prefs.setEventsAirplaneModeEnabled(call.argument<Boolean>("value") ?: true)
+                res.success(true)
+            }
+            "getEventsUnlockedEnabled" -> res.success(prefs.getEventsUnlockedEnabled())
+            "setEventsUnlockedEnabled" -> {
+                prefs.setEventsUnlockedEnabled(call.argument<Boolean>("value") ?: true)
+                res.success(true)
+            }
 
             "getBackgroundWarningDismissed" -> res.success(prefs.getBackgroundWarningDismissed())
             "setBackgroundWarningDismissed" -> {

@@ -29,11 +29,13 @@ internal enum class NotificationIconSource(val id: String) {
 
 internal data class AppPresentationOverride(
     val compactTextSource: CompactTextSource = CompactTextSource.TITLE,
-    val iconSource: NotificationIconSource = NotificationIconSource.NOTIFICATION
+    val iconSource: NotificationIconSource = NotificationIconSource.NOTIFICATION,
+    val liveDurationTimeoutMs: Long = 0L
 ) {
     fun isDefault(): Boolean {
         return compactTextSource == CompactTextSource.TITLE &&
-                iconSource == NotificationIconSource.NOTIFICATION
+                iconSource == NotificationIconSource.NOTIFICATION &&
+                liveDurationTimeoutMs == 0L
     }
 }
 
@@ -53,6 +55,7 @@ internal data class AppPresentationOverridesState(
 internal object AppPresentationOverridesCodec {
     private const val KEY_COMPACT_TEXT = "compact_text"
     private const val KEY_ICON_SOURCE = "icon_source"
+    private const val KEY_LIVE_DURATION_TIMEOUT_MS = "live_duration_timeout_ms"
     private const val KEY_DEFAULT_OVERRIDE = "__default__"
 
     fun parse(raw: String?): AppPresentationOverridesState? {
@@ -120,7 +123,8 @@ internal object AppPresentationOverridesCodec {
         item ?: return null
         return AppPresentationOverride(
             compactTextSource = CompactTextSource.from(item.optString(KEY_COMPACT_TEXT)),
-            iconSource = NotificationIconSource.from(item.optString(KEY_ICON_SOURCE))
+            iconSource = NotificationIconSource.from(item.optString(KEY_ICON_SOURCE)),
+            liveDurationTimeoutMs = item.optLong(KEY_LIVE_DURATION_TIMEOUT_MS, 0L)
         )
     }
 
@@ -128,6 +132,9 @@ internal object AppPresentationOverridesCodec {
         return JSONObject().apply {
             put(KEY_COMPACT_TEXT, entry.compactTextSource.id)
             put(KEY_ICON_SOURCE, entry.iconSource.id)
+            if (entry.liveDurationTimeoutMs > 0L) {
+                put(KEY_LIVE_DURATION_TIMEOUT_MS, entry.liveDurationTimeoutMs)
+            }
         }
     }
 }

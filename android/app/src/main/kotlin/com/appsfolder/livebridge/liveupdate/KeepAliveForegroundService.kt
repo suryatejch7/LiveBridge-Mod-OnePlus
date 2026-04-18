@@ -5,9 +5,15 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.net.NetworkInfo
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -16,9 +22,116 @@ import com.appsfolder.livebridge.MainActivity
 import com.appsfolder.livebridge.R
 
 class KeepAliveForegroundService : Service() {
+    private var systemEventReceiver: BroadcastReceiver? = null
+
     override fun onCreate() {
         super.onCreate()
         ensureChannel(this)
+        registerSystemEventsReceiver()
+    }
+
+    private fun registerSystemEventsReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+            addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+            addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
+            addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
+            addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+
+        systemEventReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val action = intent.action ?: return
+                val prefs = ConverterPrefs(context)
+                
+                var title = ""
+                var text = ""
+                var iconResId = R.drawable.ic_stat_liveupdate
+
+                when (action) {
+                    BluetoothDevice.ACTION_ACL_CONNECTED -> {
+                        if (!prefs.getEventsBluetoothEnabled()) return
+                        title = "Connected"
+                        text = "Bluetooth"
+                        iconResId = R.drawable.ic_bluetooth
+                    }
+                    BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                        if (!prefs.getEventsBluetoothEnabled()) return
+                        title = "Disconnected"
+                        text = "Bluetooth"
+                        iconResId = R.drawable.ic_bluetooth
+                    }
+                    BluetoothAdapter.ACTION_STATE_CHANGED -> {
+                        if (!prefs.getEventsBluetoothEnabled()) return
+                        val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                        if (state == BluetoothAdapter.STATE_ON) {
+                            title = "ON"
+                            text = "Bluetooth"
+                            iconResId = R.drawable.ic_bluetooth
+                        } else if (state == BluetoothAdapter.STATE_OFF) {
+                            title = "OFF"
+                            text = "Bluetooth"
+                            iconResId = R.drawable.ic_bluetooth
+                        } else {
+                            return
+                        }
+                    }
+                    WifiManager.WIFI_STATE_CHANGED_ACTION -> {
+                        if (!prefs.getEventsWifiEnabled()) return
+                        val state = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN)
+                        if (state == WifiManager.WIFI_STATE_ENABLED) {
+                            title = "ON"
+                            text = "Wi-Fi"
+                            iconResId = R.drawable.ic_wifi
+                        } else if (state == WifiManager.WIFI_STATE_DISABLED) {
+                            title = "OFF"
+                            text = "Wi-Fi"
+                            iconResId = R.drawable.ic_wifi
+                        } else {
+                            return
+                        }
+                    }
+                    WifiManager.NETWORK_STATE_CHANGED_ACTION -> {
+                        if (!prefs.getEventsWifiEnabled()) return
+                        val networkInfo = intent.getParcelableExtra<NetworkInfo>(WifiManager.EXTRA_NETWORK_INFO)
+                        if (networkInfo?.isConnected == true) {
+                            title = "Connected"
+                            text = "Wi-Fi"
+                            iconResId = R.drawable.ic_wifi
+                        } else if (networkInfo?.state == NetworkInfo.State.DISCONNECTED) {
+                            title = "Disconnected"
+                            text = "Wi-Fi"
+                            iconResId = R.drawable.ic_wifi
+                        } else {
+                            return
+                        }
+                    }
+                    Intent.ACTION_AIRPLANE_MODE_CHANGED -> {
+                        if (!prefs.getEventsAirplaneModeEnabled()) return
+                        val isAirplaneModeOn = intent.getBooleanExtra("state", false)
+                        title = if (isAirplaneModeOn) "ON" else "OFF"
+                        text = "Airplane Mode"
+                        iconResId = R.drawable.ic_airplane
+                    }
+                    Intent.ACTION_USER_PRESENT -> {
+                        if (!prefs.getEventsUnlockedEnabled()) return
+                        title = "Unlocked"
+                        text = "Device Unlocked"
+                        iconResId = R.drawable.ic_unlocked
+                    }
+                    else -> return
+                }
+                LiveUpdateNotifier.triggerSyntheticSystemEvent(context, title, text, iconResId)
+            }
+        }
+        registerReceiver(systemEventReceiver, filter)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        systemEventReceiver?.let { unregisterReceiver(it) }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

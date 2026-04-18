@@ -130,7 +130,7 @@ class LiveUpdateNotificationListenerService : NotificationListenerService() {
         if (isBlockedByJoke()) {
             return
         }
-        if (sbn.packageName == packageName) {
+        if (sbn.packageName == packageName && sbn.id != LiveUpdateNotifier.SYNTHETIC_SYSTEM_EVENT_ID) {
             return
         }
         if (!prefs.getConverterEnabled()) {
@@ -150,7 +150,7 @@ class LiveUpdateNotificationListenerService : NotificationListenerService() {
         if (isBlockedByJoke()) {
             return
         }
-        if (sbn.packageName == packageName) {
+        if (sbn.packageName == packageName && sbn.id != LiveUpdateNotifier.SYNTHETIC_SYSTEM_EVENT_ID) {
             return
         }
         if (consumeSelfDismissedSourceKey(sbn.key)) {

@@ -322,6 +322,18 @@ class ConverterPrefs(context: Context) {
         prefs.edit().putBoolean(KEY_PIXEL_JOKE_BYPASS_ENABLED, value).apply()
     }
 
+    fun getEventsBluetoothEnabled(): Boolean = prefs.getBoolean(KEY_EVENTS_BLUETOOTH_ENABLED, true)
+    fun setEventsBluetoothEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_EVENTS_BLUETOOTH_ENABLED, value).apply()
+
+    fun getEventsWifiEnabled(): Boolean = prefs.getBoolean(KEY_EVENTS_WIFI_ENABLED, true)
+    fun setEventsWifiEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_EVENTS_WIFI_ENABLED, value).apply()
+
+    fun getEventsAirplaneModeEnabled(): Boolean = prefs.getBoolean(KEY_EVENTS_AIRPLANE_MODE_ENABLED, true)
+    fun setEventsAirplaneModeEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_EVENTS_AIRPLANE_MODE_ENABLED, value).apply()
+
+    fun getEventsUnlockedEnabled(): Boolean = prefs.getBoolean(KEY_EVENTS_UNLOCKED_ENABLED, true)
+    fun setEventsUnlockedEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_EVENTS_UNLOCKED_ENABLED, value).apply()
+
     fun getAppListAccessGranted(): Boolean {
         return prefs.getBoolean(KEY_APP_LIST_ACCESS_GRANTED, false)
     }
@@ -504,6 +516,12 @@ class ConverterPrefs(context: Context) {
         private const val KEY_OTP_AUTO_COPY_ENABLED = "otp_auto_copy_enabled"
         private const val KEY_OTP_PACKAGE_RULES = "otp_package_rules"
         private const val KEY_OTP_PACKAGE_MODE = "otp_package_mode"
+
+        private const val KEY_EVENTS_BLUETOOTH_ENABLED = "events_bluetooth_enabled"
+        private const val KEY_EVENTS_WIFI_ENABLED = "events_wifi_enabled"
+        private const val KEY_EVENTS_AIRPLANE_MODE_ENABLED = "events_airplane_mode_enabled"
+        private const val KEY_EVENTS_UNLOCKED_ENABLED = "events_unlocked_enabled"
+
         private const val KEY_PIXEL_JOKE_BYPASS_ENABLED = "pixel_joke_bypass_enabled"
         private const val KEY_APP_LIST_ACCESS_GRANTED = "app_list_access_granted"
         private const val KEY_BACKGROUND_WARNING_DISMISSED = "background_warning_dismissed"

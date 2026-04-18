@@ -45,6 +45,8 @@ object LiveUpdateNotifier {
     private const val CHANNEL_NAME = "LiveBridge Updates"
     private const val TAG = "LiveUpdateNotifier"
     private const val MAX_MIRRORED_ACTIONS = 3
+    const val SYNTHETIC_SYSTEM_EVENT_ID = 999123
+    private const val SYNTHETIC_SYSTEM_EVENT_DURATION_MS = 3500L
     private const val OTP_REPEAT_SUPPRESS_MS = 60_000L
     private const val OTP_AUTOCOPY_COPIED_SHOW_DELAY_MS = 1_000L
     private const val OTP_AUTOCOPY_COPIED_SHOW_DURATION_MS = 1_500L
@@ -76,6 +78,39 @@ object LiveUpdateNotifier {
     private val otpAnimationGenerations = mutableMapOf<String, Long>()
     private val smartAnimationGenerations = mutableMapOf<String, Long>()
     private val smartAnimationStates = mutableMapOf<String, SmartAnimationState>()
+
+    fun triggerSyntheticSystemEvent(context: Context, title: String, text: String, iconResId: Int) {
+        val manager = NotificationManagerCompat.from(context)
+        
+        val intent = android.content.Intent(context, com.appsfolder.livebridge.MainActivity::class.java).apply {
+            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            context,
+            0,
+            intent,
+            android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setSmallIcon(iconResId)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+            .setProgress(0, 0, true)
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+            .setContentIntent(pendingIntent)
+            
+        manager.notify(SYNTHETIC_SYSTEM_EVENT_ID, builder.build())
+        
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            manager.cancel(SYNTHETIC_SYSTEM_EVENT_ID)
+        }, SYNTHETIC_SYSTEM_EVENT_DURATION_MS)
+    }
 
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -276,7 +311,8 @@ object LiveUpdateNotifier {
                 otpMatch == null &&
                 smartMatch == null &&
                 textProgressMatch == null &&
-                prefs.getOnlyWithProgress()
+                prefs.getOnlyWithProgress() &&
+                sbn.id != SYNTHETIC_SYSTEM_EVENT_ID
             ) {
                 val staleAggregateIds = synchronized(stateLock) {
                     clearAggregateTrackingForSbnKeyLocked(sbn.key)
@@ -474,7 +510,7 @@ object LiveUpdateNotifier {
                         }
 
                         val state = aggregateStates.getOrPut(smartMatch.aggregateKey) {
-                            AggregateState(smartMatch.stageValue, smartMatch.maxStage)
+                            AggregateState(smartMatch.stageValue, smartMatch.maxStage, stageStartedAtMs = System.currentTimeMillis())
                         }
                         state.activeSbnKeys.add(sbn.key)
                         state.sourcesBySbnKey[sbn.key] = SmartSourceEntry(
@@ -483,11 +519,20 @@ object LiveUpdateNotifier {
                             sbn = sbn,
                             compactOrderCode = smartMatch.compactOrderCode
                         )
+                        val oldMaxStageSeen = state.maxStageSeen
                         state.maxStageSeen = if (smartMatch.keepHighestStage) {
                             maxOf(state.maxStageSeen, smartMatch.stageValue)
                         } else {
                             smartMatch.stageValue
                         }
+                        if (state.maxStageSeen != oldMaxStageSeen) {
+                            state.stageStartedAtMs = System.currentTimeMillis()
+                        }
+                        
+                        val timeoutMs = appPresentationOverride.liveDurationTimeoutMs
+                        val shouldTimeout = timeoutMs > 0 && 
+                                (System.currentTimeMillis() - state.stageStartedAtMs > timeoutMs)
+
                         sbnToAggregateKey[sbn.key] = smartMatch.aggregateKey
                         val sourceEntry = selectSmartSourceEntryLocked(
                             aggregateState = state,
@@ -499,10 +544,16 @@ object LiveUpdateNotifier {
                             stageValue = state.maxStageSeen,
                             stageMax = state.maxStage,
                             compactOrderCode = sourceEntry?.compactOrderCode ?: smartMatch.compactOrderCode,
-                            sourceSbn = sourceEntry?.sbn ?: sbn
+                            sourceSbn = sourceEntry?.sbn ?: sbn,
+                            shouldTimeout = shouldTimeout
                         )
                     }
                     routeState.staleAggregateIds.forEach(manager::cancel)
+                    
+                    if (routeState.shouldTimeout) {
+                        manager.cancel(mirrorIdForKey(smartMatch.aggregateKey))
+                        return notMirroredResult()
+                    }
                     val sourceSbn = routeState.sourceSbn
                     val sourceNotification = sourceSbn.notification
                     val smartRuleId = smartRuleIdFromAggregateKey(smartMatch.aggregateKey)
@@ -691,6 +742,10 @@ object LiveUpdateNotifier {
         parserDictionary: LiveParserDictionary,
         mediaPlaybackSmartEnabled: Boolean
     ): Boolean {
+        if (sbn.id == SYNTHETIC_SYSTEM_EVENT_ID && sbn.packageName == "com.appsfolder.livebridge") {
+            return true
+        }
+
         val source = sbn.notification
 
         if (isLikelyMediaPlaybackNotification(source) && !mediaPlaybackSmartEnabled) {
@@ -712,19 +767,25 @@ object LiveUpdateNotifier {
         sbn: StatusBarNotification
     ): Boolean {
         val packageNameLower = sbn.packageName.lowercase(Locale.ROOT)
-        if (appPackageName.isNotEmpty() && sbn.packageName == appPackageName) {
+        if (appPackageName.isNotEmpty() && sbn.packageName == appPackageName && sbn.id != SYNTHETIC_SYSTEM_EVENT_ID) {
             return false
         }
         val source = sbn.notification
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && source.channelId == CHANNEL_ID) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && source.channelId == CHANNEL_ID && sbn.id != SYNTHETIC_SYSTEM_EVENT_ID) {
             return false
         }
         if (Build.VERSION.SDK_INT >= 36 && source.flags and 0x40000 != 0) {
             return false
         }
-        if (source.flags and Notification.FLAG_GROUP_SUMMARY != 0 &&
-            packageNameLower != TWO_GIS_PACKAGE
-        ) {
+        val isGroupSummaryAllowed = packageNameLower == TWO_GIS_PACKAGE ||
+                packageNameLower == "com.microsoft.android.smsorganizer" ||
+                packageNameLower == "com.google.android.apps.messaging" ||
+                packageNameLower == "com.samsung.android.messaging" ||
+                packageNameLower == "com.nothing.messaging"
+
+        if (source.flags and Notification.FLAG_GROUP_SUMMARY != 0 && !isGroupSummaryAllowed) {
+            // We only allow known messaging apps and 2GIS to process group summaries,
+            // because they often bundle the actual OTP text into the summary bundle.
             return false
         }
         return true
@@ -825,9 +886,9 @@ object LiveUpdateNotifier {
             .setWhen(resolveStableWhen(source, sbn.postTime))
             .setShowWhen(false)
             .setColor(progressColor)
-            .setCategory(if (hasProgress) Notification.CATEGORY_PROGRESS else Notification.CATEGORY_STATUS)
+            .setCategory(source.category ?: if (hasProgress) NotificationCompat.CATEGORY_PROGRESS else NotificationCompat.CATEGORY_STATUS)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
 
         val preferredSmallIcon = when (appPresentationOverride.iconSource) {
             NotificationIconSource.NOTIFICATION ->
@@ -2823,6 +2884,23 @@ object LiveUpdateNotifier {
         add(extras.getCharSequence(Notification.EXTRA_INFO_TEXT))
         extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
             ?.forEach(::add)
+            
+        // Extract texts from MessagingStyle
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val messages = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+            messages?.forEach { bundle ->
+                if (bundle is android.os.Bundle) {
+                    add(bundle.getCharSequence("text"))
+                }
+            }
+            val historicMessages = extras.getParcelableArray(Notification.EXTRA_HISTORIC_MESSAGES)
+            historicMessages?.forEach { bundle ->
+                if (bundle is android.os.Bundle) {
+                    add(bundle.getCharSequence("text"))
+                }
+            }
+        }
+        
         if (includeRemoteViewTexts) {
             extractRemoteViewTexts(notification).forEach { add(it) }
         }
@@ -3268,7 +3346,8 @@ object LiveUpdateNotifier {
         var maxStageSeen: Int,
         val maxStage: Int,
         val activeSbnKeys: MutableSet<String> = mutableSetOf(),
-        val sourcesBySbnKey: MutableMap<String, SmartSourceEntry> = mutableMapOf()
+        val sourcesBySbnKey: MutableMap<String, SmartSourceEntry> = mutableMapOf(),
+        var stageStartedAtMs: Long = 0L
     )
 
     private data class SmartSourceEntry(
@@ -3303,7 +3382,8 @@ object LiveUpdateNotifier {
         val stageValue: Int,
         val stageMax: Int,
         val compactOrderCode: String?,
-        val sourceSbn: StatusBarNotification
+        val sourceSbn: StatusBarNotification,
+        val shouldTimeout: Boolean = false
     )
 
     private data class RemoteDrawableAssets(

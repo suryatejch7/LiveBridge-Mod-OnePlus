@@ -249,6 +249,19 @@ class LiveBridgePlatform {
   static Future<bool> setEventsUnlockedEnabled(bool value) =>
       _askBool('setEventsUnlockedEnabled', {'value': value});
 
+  static Future<int> getEventsDurationMs() async {
+    try {
+      final int? result =
+          await _channel.invokeMethod<int>('getEventsDurationMs');
+      return result ?? 3500;
+    } catch (_) {
+      return 3500;
+    }
+  }
+
+  static Future<bool> setEventsDurationMs(int value) =>
+      _askBool('setEventsDurationMs', {'value': value});
+
   static Future<bool> getBackgroundWarningDismissed() =>
       _askBool('getBackgroundWarningDismissed');
   static Future<bool> setBackgroundWarningDismissed(bool value) =>

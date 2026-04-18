@@ -137,6 +137,12 @@ class MainActivity : FlutterActivity() {
                 prefs.setEventsUnlockedEnabled(call.argument<Boolean>("value") ?: true)
                 res.success(true)
             }
+            "getEventsDurationMs" -> res.success(prefs.getEventsDurationMs())
+            "setEventsDurationMs" -> {
+                val value = call.argument<Number>("value")?.toLong() ?: 3500L
+                prefs.setEventsDurationMs(value)
+                res.success(true)
+            }
 
             "getBackgroundWarningDismissed" -> res.success(prefs.getBackgroundWarningDismissed())
             "setBackgroundWarningDismissed" -> {

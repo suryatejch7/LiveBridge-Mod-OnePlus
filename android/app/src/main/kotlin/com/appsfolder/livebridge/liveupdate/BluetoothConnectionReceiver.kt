@@ -42,7 +42,7 @@ class BluetoothConnectionReceiver : BroadcastReceiver() {
                 } catch (_: SecurityException) { null } ?: "Bluetooth Device"
 
                 LiveUpdateNotifier.triggerSyntheticSystemEvent(
-                    context, "Disconnected", deviceName, R.drawable.ic_bluetooth
+                    context, "Disconnected", deviceName, R.drawable.ic_bluetooth_off
                 )
             }
         }

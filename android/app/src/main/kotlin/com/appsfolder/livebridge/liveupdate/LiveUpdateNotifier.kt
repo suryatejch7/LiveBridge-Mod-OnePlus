@@ -46,7 +46,6 @@ object LiveUpdateNotifier {
     private const val TAG = "LiveUpdateNotifier"
     private const val MAX_MIRRORED_ACTIONS = 3
     const val SYNTHETIC_SYSTEM_EVENT_ID = 999123
-    private const val SYNTHETIC_SYSTEM_EVENT_DURATION_MS = 3500L
     private const val OTP_REPEAT_SUPPRESS_MS = 60_000L
     private const val OTP_AUTOCOPY_COPIED_SHOW_DELAY_MS = 1_000L
     private const val OTP_AUTOCOPY_COPIED_SHOW_DURATION_MS = 1_500L
@@ -111,9 +110,11 @@ object LiveUpdateNotifier {
             
         manager.notify(SYNTHETIC_SYSTEM_EVENT_ID, builder.build())
         
+        val durationMs = ConverterPrefs(context).getEventsDurationMs()
+
         mainHandler.postDelayed({
             manager.cancel(SYNTHETIC_SYSTEM_EVENT_ID)
-        }, SYNTHETIC_SYSTEM_EVENT_DURATION_MS)
+        }, durationMs)
     }
 
     fun ensureChannel(context: Context) {

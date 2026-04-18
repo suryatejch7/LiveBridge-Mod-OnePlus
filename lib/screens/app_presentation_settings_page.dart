@@ -225,7 +225,9 @@ class _AppPresentationSettingsPageState
 
   bool _isSameOverride(AppPresentationOverride a, AppPresentationOverride b) {
     return a.compactTextSource == b.compactTextSource &&
-        a.iconSource == b.iconSource;
+        a.iconSource == b.iconSource &&
+        (a.liveDurationTimeoutMs == b.liveDurationTimeoutMs || 
+         a.liveDurationTimeoutMs == -1);
   }
 
   _ParsedAppPresentationOverrides _parseOverrides(String raw) {
@@ -843,6 +845,12 @@ class _AppPresentationEditorSheetState
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+    final isGlobalDefault = widget.app == null;
+    
+    // Ensure global default resolves -1 to 0 (Infinite) so the UI has a valid selection
+    if (isGlobalDefault && _liveDurationTimeoutMs == -1) {
+      _liveDurationTimeoutMs = 0;
+    }
 
     return SafeArea(
       top: false,
@@ -942,22 +950,31 @@ class _AppPresentationEditorSheetState
             const SizedBox(height: 12),
             LiveBridgeToggleSelector<int>(
               value: _liveDurationTimeoutMs,
-              options: const <SelectorOption<int>>[
-                SelectorOption<int>(
+              options: <SelectorOption<int>>[
+                if (widget.app != null)
+                  const SelectorOption<int>(
+                    value: -1,
+                    title: 'Default',
+                  ),
+                const SelectorOption<int>(
                   value: 0,
                   title: 'Infinite',
                 ),
-                SelectorOption<int>(
+                const SelectorOption<int>(
+                  value: 2000,
+                  title: '2s',
+                ),
+                const SelectorOption<int>(
+                  value: 3000,
+                  title: '3s',
+                ),
+                const SelectorOption<int>(
                   value: 5000,
                   title: '5s',
                 ),
-                SelectorOption<int>(
+                const SelectorOption<int>(
                   value: 15000,
                   title: '15s',
-                ),
-                SelectorOption<int>(
-                  value: 60000,
-                  title: '1m',
                 ),
               ],
               onChanged: (int next) {

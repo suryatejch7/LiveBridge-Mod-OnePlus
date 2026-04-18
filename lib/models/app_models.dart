@@ -175,7 +175,7 @@ class AppPresentationOverride {
   const AppPresentationOverride({
     this.compactTextSource = AppCompactTextSource.title,
     this.iconSource = AppNotificationIconSource.notification,
-    this.liveDurationTimeoutMs = 0,
+    this.liveDurationTimeoutMs = -1,
   });
 
   final AppCompactTextSource compactTextSource;
@@ -185,13 +185,13 @@ class AppPresentationOverride {
   bool get isDefault =>
       compactTextSource == AppCompactTextSource.title &&
       iconSource == AppNotificationIconSource.notification &&
-      liveDurationTimeoutMs == 0;
+      (liveDurationTimeoutMs == -1 || liveDurationTimeoutMs == 0);
 
   Map<String, dynamic> toJsonEntry() {
     return <String, dynamic>{
       'compact_text': compactTextSource.id,
       'icon_source': iconSource.id,
-      if (liveDurationTimeoutMs > 0)
+      if (liveDurationTimeoutMs != -1)
         'live_duration_timeout_ms': liveDurationTimeoutMs,
     };
   }
@@ -204,7 +204,7 @@ class AppPresentationOverride {
       iconSource: AppNotificationIconSourceId.from(
         json['icon_source'] as String?,
       ),
-      liveDurationTimeoutMs: (json['live_duration_timeout_ms'] as num?)?.toInt() ?? 0,
+      liveDurationTimeoutMs: (json['live_duration_timeout_ms'] as num?)?.toInt() ?? -1,
     );
   }
 }

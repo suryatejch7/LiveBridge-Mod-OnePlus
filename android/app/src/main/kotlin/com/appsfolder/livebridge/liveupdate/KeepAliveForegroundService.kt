@@ -59,7 +59,7 @@ class KeepAliveForegroundService : Service() {
                         } else if (state == BluetoothAdapter.STATE_OFF) {
                             title = "OFF"
                             text = "Bluetooth"
-                            iconResId = R.drawable.ic_bluetooth
+                            iconResId = R.drawable.ic_bluetooth_off
                         } else {
                             return
                         }
@@ -74,7 +74,7 @@ class KeepAliveForegroundService : Service() {
                         } else if (state == WifiManager.WIFI_STATE_DISABLED) {
                             title = "OFF"
                             text = "Wi-Fi"
-                            iconResId = R.drawable.ic_wifi
+                            iconResId = R.drawable.ic_wifi_off
                         } else {
                             return
                         }
@@ -97,7 +97,7 @@ class KeepAliveForegroundService : Service() {
                         } else if (networkInfo?.state == NetworkInfo.State.DISCONNECTED) {
                             title = "Disconnected"
                             text = ssid
-                            iconResId = R.drawable.ic_wifi
+                            iconResId = R.drawable.ic_wifi_off
                         } else {
                             return
                         }
@@ -107,7 +107,7 @@ class KeepAliveForegroundService : Service() {
                         val isAirplaneModeOn = intent.getBooleanExtra("state", false)
                         title = if (isAirplaneModeOn) "ON" else "OFF"
                         text = "Airplane Mode"
-                        iconResId = R.drawable.ic_airplane
+                        iconResId = if (isAirplaneModeOn) R.drawable.ic_airplane else R.drawable.ic_airplane_off
                     }
                     Intent.ACTION_USER_PRESENT -> {
                         if (!prefs.getEventsUnlockedEnabled()) return

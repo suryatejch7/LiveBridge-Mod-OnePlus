@@ -77,6 +77,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
   bool _eventsWifiEnabled = true;
   bool _eventsAirplaneModeEnabled = true;
   bool _eventsUnlockedEnabled = true;
+  int _eventsDurationMs = 3500;
   bool _hyperBridgeEnabled = false;
   bool _notificationDedupEnabled = false;
   bool _onlyWithProgress = true;
@@ -248,6 +249,8 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
           await LiveBridgePlatform.getEventsAirplaneModeEnabled();
       final bool eventsUnlockedEnabled =
           await LiveBridgePlatform.getEventsUnlockedEnabled();
+      final int eventsDurationMs = 
+          await LiveBridgePlatform.getEventsDurationMs();
       final bool hyperBridgeEnabled =
           await LiveBridgePlatform.getHyperBridgeEnabled();
       final bool notificationDedupEnabled =
@@ -369,6 +372,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
         _eventsWifiEnabled = eventsWifiEnabled;
         _eventsAirplaneModeEnabled = eventsAirplaneModeEnabled;
         _eventsUnlockedEnabled = eventsUnlockedEnabled;
+        _eventsDurationMs = eventsDurationMs;
         _hyperBridgeEnabled = hyperBridgeEnabled;
         _notificationDedupEnabled = notificationDedupEnabled;
         _notificationDedupMode = notificationDedupMode;
@@ -554,6 +558,13 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     LiveBridgeHaptics.toggle(value);
     setState(() => _eventsUnlockedEnabled = value);
     await LiveBridgePlatform.setEventsUnlockedEnabled(value);
+  }
+
+  Future<void> _setEventsDuration(int value) async {
+    if (_eventsDurationMs == value) return;
+    LiveBridgeHaptics.selection();
+    setState(() => _eventsDurationMs = value);
+    await LiveBridgePlatform.setEventsDurationMs(value);
   }
 
   Future<void> _setAnimatedIsland(bool value) async {
@@ -2170,6 +2181,51 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
                 color: colorScheme.onSurfaceVariant.withOpacity(0.8),
                 fontSize: 13,
               ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text(
+                  'Event Alert Duration',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'How long should the dynamic alert remain visible before disappearing automatically.',
+                  style: TextStyle(
+                    color: colorScheme.onSurfaceVariant.withOpacity(0.8),
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                LiveBridgeToggleSelector<int>(
+                  value: _eventsDurationMs,
+                  options: const <SelectorOption<int>>[
+                    SelectorOption<int>(
+                      value: 2000,
+                      title: '2s',
+                    ),
+                    SelectorOption<int>(
+                      value: 3000,
+                      title: '3s',
+                    ),
+                    SelectorOption<int>(
+                      value: 4000,
+                      title: '4s',
+                    ),
+                    SelectorOption<int>(
+                      value: 5000,
+                      title: '5s',
+                    ),
+                  ],
+                  onChanged: (int next) => _setEventsDuration(next),
+                ),
+                const SizedBox(height: 8),
+              ],
             ),
           ),
         ],

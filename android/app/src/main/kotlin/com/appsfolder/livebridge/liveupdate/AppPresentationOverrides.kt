@@ -35,16 +35,26 @@ internal data class AppPresentationOverride(
     fun isDefault(): Boolean {
         return compactTextSource == CompactTextSource.TITLE &&
                 iconSource == NotificationIconSource.NOTIFICATION &&
-                liveDurationTimeoutMs == 0L
+                liveDurationTimeoutMs == -1L // Use -1 internally for inherit
     }
 }
 
 internal data class AppPresentationOverridesState(
-    val defaultOverride: AppPresentationOverride = AppPresentationOverride(),
+    val defaultOverride: AppPresentationOverride = AppPresentationOverride(liveDurationTimeoutMs = -1L),
     val packageOverrides: Map<String, AppPresentationOverride> = emptyMap()
 ) {
     fun resolve(packageNameLower: String): AppPresentationOverride {
-        return packageOverrides[packageNameLower] ?: defaultOverride
+        val specific = packageOverrides[packageNameLower] ?: return defaultOverride
+        
+        val mergedCompactText = if (specific.compactTextSource != CompactTextSource.TITLE) specific.compactTextSource else defaultOverride.compactTextSource
+        val mergedIconSource = if (specific.iconSource != NotificationIconSource.NOTIFICATION) specific.iconSource else defaultOverride.iconSource
+        val mergedLiveDuration = if (specific.liveDurationTimeoutMs != -1L) specific.liveDurationTimeoutMs else defaultOverride.liveDurationTimeoutMs
+
+        return AppPresentationOverride(
+            compactTextSource = mergedCompactText,
+            iconSource = mergedIconSource,
+            liveDurationTimeoutMs = if (mergedLiveDuration == -1L) 0L else mergedLiveDuration
+        )
     }
 
     fun isEmpty(): Boolean {
@@ -124,7 +134,7 @@ internal object AppPresentationOverridesCodec {
         return AppPresentationOverride(
             compactTextSource = CompactTextSource.from(item.optString(KEY_COMPACT_TEXT)),
             iconSource = NotificationIconSource.from(item.optString(KEY_ICON_SOURCE)),
-            liveDurationTimeoutMs = item.optLong(KEY_LIVE_DURATION_TIMEOUT_MS, 0L)
+            liveDurationTimeoutMs = item.optLong(KEY_LIVE_DURATION_TIMEOUT_MS, -1L)
         )
     }
 
@@ -132,7 +142,7 @@ internal object AppPresentationOverridesCodec {
         return JSONObject().apply {
             put(KEY_COMPACT_TEXT, entry.compactTextSource.id)
             put(KEY_ICON_SOURCE, entry.iconSource.id)
-            if (entry.liveDurationTimeoutMs > 0L) {
+            if (entry.liveDurationTimeoutMs != -1L) {
                 put(KEY_LIVE_DURATION_TIMEOUT_MS, entry.liveDurationTimeoutMs)
             }
         }

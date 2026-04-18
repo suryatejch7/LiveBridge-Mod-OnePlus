@@ -31,6 +31,11 @@ class BluetoothConnectionReceiver : BroadcastReceiver() {
                 )
             }
             BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                val adapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+                if (adapter != null && (adapter.state == android.bluetooth.BluetoothAdapter.STATE_TURNING_OFF || adapter.state == android.bluetooth.BluetoothAdapter.STATE_OFF)) {
+                    return
+                }
+
                 val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
                 } else {

@@ -81,10 +81,21 @@ class KeepAliveForegroundService : Service() {
                     }
                     WifiManager.NETWORK_STATE_CHANGED_ACTION -> {
                         if (!prefs.getEventsWifiEnabled()) return
+                        
+                        val wifiManager = context.applicationContext
+                            .getSystemService(Context.WIFI_SERVICE) as? WifiManager
+                            
+                        // Skip "Disconnected" alert if Wi-Fi is actively turning off or already off.
+                        // The WIFI_STATE_CHANGED_ACTION will emit the "OFF" event instead.
+                        if (wifiManager != null) {
+                            val state = wifiManager.wifiState
+                            if (state == WifiManager.WIFI_STATE_DISABLING || state == WifiManager.WIFI_STATE_DISABLED) {
+                                return
+                            }
+                        }
+                        
                         val networkInfo = intent.getParcelableExtra<NetworkInfo>(WifiManager.EXTRA_NETWORK_INFO)
                         val ssid = try {
-                            val wifiManager = context.applicationContext
-                                .getSystemService(Context.WIFI_SERVICE) as? WifiManager
                             wifiManager?.connectionInfo?.ssid
                                 ?.removeSurrounding("\"")
                                 ?.takeIf { it.isNotBlank() && it != "<unknown ssid>" }

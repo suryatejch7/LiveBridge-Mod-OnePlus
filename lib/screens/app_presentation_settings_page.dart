@@ -105,7 +105,8 @@ bool _isSameStandaloneAppPresentationOverride(
   AppPresentationOverride b,
 ) {
   return a.compactTextSource == b.compactTextSource &&
-      a.iconSource == b.iconSource;
+      a.iconSource == b.iconSource &&
+      a.liveDurationTimeoutMs == b.liveDurationTimeoutMs;
 }
 
 _ParsedAppPresentationOverrides _parseStandaloneAppPresentationOverrides(
@@ -825,11 +826,13 @@ class _AppPresentationEditorSheetState
   late AppCompactTextSource _compactTextSource =
       widget.initialValue.compactTextSource;
   late AppNotificationIconSource _iconSource = widget.initialValue.iconSource;
+  late int _liveDurationTimeoutMs = widget.initialValue.liveDurationTimeoutMs;
 
   AppPresentationOverride _currentValue() {
     return AppPresentationOverride(
       compactTextSource: _compactTextSource,
       iconSource: _iconSource,
+      liveDurationTimeoutMs: _liveDurationTimeoutMs,
     );
   }
 
@@ -931,6 +934,38 @@ class _AppPresentationEditorSheetState
                 _emitChanged();
               },
             ),
+            const SizedBox(height: 24),
+            const Text(
+              'Live Alert Duration Timeout',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            LiveBridgeToggleSelector<int>(
+              value: _liveDurationTimeoutMs,
+              options: const <SelectorOption<int>>[
+                SelectorOption<int>(
+                  value: 0,
+                  title: 'Infinite',
+                ),
+                SelectorOption<int>(
+                  value: 5000,
+                  title: '5s',
+                ),
+                SelectorOption<int>(
+                  value: 15000,
+                  title: '15s',
+                ),
+                SelectorOption<int>(
+                  value: 60000,
+                  title: '1m',
+                ),
+              ],
+              onChanged: (int next) {
+                if (_liveDurationTimeoutMs == next) return;
+                setState(() => _liveDurationTimeoutMs = next);
+                _emitChanged();
+              },
+            ),
             const SizedBox(height: 32),
             Row(
               children: [
@@ -942,6 +977,7 @@ class _AppPresentationEditorSheetState
                         _compactTextSource =
                             widget.resetValue.compactTextSource;
                         _iconSource = widget.resetValue.iconSource;
+                        _liveDurationTimeoutMs = widget.resetValue.liveDurationTimeoutMs;
                       });
                       _emitChanged();
                     },

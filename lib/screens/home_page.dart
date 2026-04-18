@@ -73,6 +73,10 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
   bool _syncDndEnabled = false;
   bool _aospCuttingEnabled = false;
   bool _animatedIslandEnabled = false;
+  bool _eventsBluetoothEnabled = true;
+  bool _eventsWifiEnabled = true;
+  bool _eventsAirplaneModeEnabled = true;
+  bool _eventsUnlockedEnabled = true;
   bool _hyperBridgeEnabled = false;
   bool _notificationDedupEnabled = false;
   bool _onlyWithProgress = true;
@@ -236,6 +240,14 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
           await LiveBridgePlatform.getAospCuttingEnabled();
       final bool animatedIslandEnabled =
           await LiveBridgePlatform.getAnimatedIslandEnabled();
+      final bool eventsBluetoothEnabled =
+          await LiveBridgePlatform.getEventsBluetoothEnabled();
+      final bool eventsWifiEnabled =
+          await LiveBridgePlatform.getEventsWifiEnabled();
+      final bool eventsAirplaneModeEnabled =
+          await LiveBridgePlatform.getEventsAirplaneModeEnabled();
+      final bool eventsUnlockedEnabled =
+          await LiveBridgePlatform.getEventsUnlockedEnabled();
       final bool hyperBridgeEnabled =
           await LiveBridgePlatform.getHyperBridgeEnabled();
       final bool notificationDedupEnabled =
@@ -353,6 +365,10 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
         _syncDndEnabled = syncDndEnabled;
         _aospCuttingEnabled = aospCuttingEnabled;
         _animatedIslandEnabled = animatedIslandEnabled;
+        _eventsBluetoothEnabled = eventsBluetoothEnabled;
+        _eventsWifiEnabled = eventsWifiEnabled;
+        _eventsAirplaneModeEnabled = eventsAirplaneModeEnabled;
+        _eventsUnlockedEnabled = eventsUnlockedEnabled;
         _hyperBridgeEnabled = hyperBridgeEnabled;
         _notificationDedupEnabled = notificationDedupEnabled;
         _notificationDedupMode = notificationDedupMode;
@@ -514,6 +530,30 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     LiveBridgeHaptics.toggle(value);
     setState(() => _aospCuttingEnabled = value);
     await LiveBridgePlatform.setAospCuttingEnabled(value);
+  }
+
+  Future<void> _setEventsBluetooth(bool value) async {
+    LiveBridgeHaptics.toggle(value);
+    setState(() => _eventsBluetoothEnabled = value);
+    await LiveBridgePlatform.setEventsBluetoothEnabled(value);
+  }
+
+  Future<void> _setEventsWifi(bool value) async {
+    LiveBridgeHaptics.toggle(value);
+    setState(() => _eventsWifiEnabled = value);
+    await LiveBridgePlatform.setEventsWifiEnabled(value);
+  }
+
+  Future<void> _setEventsAirplaneMode(bool value) async {
+    LiveBridgeHaptics.toggle(value);
+    setState(() => _eventsAirplaneModeEnabled = value);
+    await LiveBridgePlatform.setEventsAirplaneModeEnabled(value);
+  }
+
+  Future<void> _setEventsUnlocked(bool value) async {
+    LiveBridgeHaptics.toggle(value);
+    setState(() => _eventsUnlockedEnabled = value);
+    await LiveBridgePlatform.setEventsUnlockedEnabled(value);
   }
 
   Future<void> _setAnimatedIsland(bool value) async {
@@ -1417,6 +1457,10 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
         'otp_auto_copy_enabled': _otpAutoCopyEnabled,
         'aosp_cutting_enabled': _aospCuttingEnabled,
         'animated_island_enabled': _animatedIslandEnabled,
+        'events_bluetooth_enabled': _eventsBluetoothEnabled,
+        'events_wifi_enabled': _eventsWifiEnabled,
+        'events_airplane_mode_enabled': _eventsAirplaneModeEnabled,
+        'events_unlocked_enabled': _eventsUnlockedEnabled,
         'hyper_bridge_enabled': _hyperBridgeEnabled,
         'notification_dedup_enabled': _notificationDedupEnabled,
         'notification_dedup_mode': _notificationDedupMode.id,
@@ -1500,6 +1544,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
       'rules',
       'smart',
       'otp',
+      'events',
       'experimental',
       'app_presentation',
       'settings',
@@ -1593,6 +1638,8 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
                     _buildSmartCard(s),
                     const SizedBox(height: 24),
                     _buildOtpCard(s),
+                    const SizedBox(height: 24),
+                    _buildEventsCard(s),
                     const SizedBox(height: 24),
                     _buildExperimentalCard(s),
                     const SizedBox(height: 24),
@@ -2049,6 +2096,80 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
               onPressed: _openAppPresentationSettings,
               icon: const Icon(Icons.tune_rounded, size: 18),
               label: Text(s.appPresentationSettings),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEventsCard(AppStrings s) {
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+
+    return _sectionPanel(
+      sectionId: 'events',
+      title: s.eventsTitle,
+      icon: Icons.bolt_rounded,
+      child: Column(
+        children: <Widget>[
+          SwitchListTile.adaptive(
+            value: _eventsBluetoothEnabled,
+            onChanged: _setEventsBluetooth,
+            title: Text(
+              s.eventsBluetoothTitle,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              s.eventsBluetoothSubtitle,
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant.withOpacity(0.8),
+                fontSize: 13,
+              ),
+            ),
+          ),
+          SwitchListTile.adaptive(
+            value: _eventsWifiEnabled,
+            onChanged: _setEventsWifi,
+            title: Text(
+              s.eventsWifiTitle,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              s.eventsWifiSubtitle,
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant.withOpacity(0.8),
+                fontSize: 13,
+              ),
+            ),
+          ),
+          SwitchListTile.adaptive(
+            value: _eventsAirplaneModeEnabled,
+            onChanged: _setEventsAirplaneMode,
+            title: Text(
+              s.eventsAirplaneModeTitle,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              s.eventsAirplaneModeSubtitle,
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant.withOpacity(0.8),
+                fontSize: 13,
+              ),
+            ),
+          ),
+          SwitchListTile.adaptive(
+            value: _eventsUnlockedEnabled,
+            onChanged: _setEventsUnlocked,
+            title: Text(
+              s.eventsUnlockedTitle,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              s.eventsUnlockedSubtitle,
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant.withOpacity(0.8),
+                fontSize: 13,
+              ),
             ),
           ),
         ],

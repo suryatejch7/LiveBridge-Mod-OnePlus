@@ -228,6 +228,27 @@ class LiveBridgePlatform {
       _askBool('getAppListAccessGranted');
   static Future<bool> setAppListAccessGranted(bool value) =>
       _askBool('setAppListAccessGranted', {'value': value});
+
+  static Future<bool> getEventsBluetoothEnabled() =>
+      _askBool('getEventsBluetoothEnabled');
+  static Future<bool> setEventsBluetoothEnabled(bool value) =>
+      _askBool('setEventsBluetoothEnabled', {'value': value});
+
+  static Future<bool> getEventsWifiEnabled() =>
+      _askBool('getEventsWifiEnabled');
+  static Future<bool> setEventsWifiEnabled(bool value) =>
+      _askBool('setEventsWifiEnabled', {'value': value});
+
+  static Future<bool> getEventsAirplaneModeEnabled() =>
+      _askBool('getEventsAirplaneModeEnabled');
+  static Future<bool> setEventsAirplaneModeEnabled(bool value) =>
+      _askBool('setEventsAirplaneModeEnabled', {'value': value});
+
+  static Future<bool> getEventsUnlockedEnabled() =>
+      _askBool('getEventsUnlockedEnabled');
+  static Future<bool> setEventsUnlockedEnabled(bool value) =>
+      _askBool('setEventsUnlockedEnabled', {'value': value});
+
   static Future<bool> getBackgroundWarningDismissed() =>
       _askBool('getBackgroundWarningDismissed');
   static Future<bool> setBackgroundWarningDismissed(bool value) =>

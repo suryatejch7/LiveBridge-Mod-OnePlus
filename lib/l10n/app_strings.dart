@@ -151,6 +151,17 @@ class AppStrings {
       ? 'Доступно обновление${version.isNotEmpty ? ': $version' : ''}'
       : 'Update available${version.isNotEmpty ? ': $version' : ''}';
   String get experimentalTitle => isRu ? 'Экспериментальное' : 'Experimental';
+  
+  String get eventsTitle => isRu ? 'События' : 'Events';
+  String get eventsBluetoothTitle => isRu ? 'Bluetooth' : 'Bluetooth';
+  String get eventsBluetoothSubtitle => isRu ? 'Показывать события подключения Bluetooth' : 'Show Bluetooth connection events';
+  String get eventsWifiTitle => isRu ? 'Wi-Fi' : 'Wi-Fi';
+  String get eventsWifiSubtitle => isRu ? 'Показывать изменения состояния Wi-Fi' : 'Show Wi-Fi state changes';
+  String get eventsAirplaneModeTitle => isRu ? 'Режим полета' : 'Airplane Mode';
+  String get eventsAirplaneModeSubtitle => isRu ? 'Показывать переключения режима полета' : 'Show Airplane mode toggles';
+  String get eventsUnlockedTitle => isRu ? 'Разблокировка' : 'Device Unlocked';
+  String get eventsUnlockedSubtitle => isRu ? 'Показывать события разблокировки экрана' : 'Show device unlock events';
+
   String get notificationDedupTitle =>
       isRu ? 'Notification dedup' : 'Notification dedup';
   String get notificationDedupSubtitle => isRu

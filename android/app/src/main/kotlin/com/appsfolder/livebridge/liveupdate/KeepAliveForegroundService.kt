@@ -32,8 +32,6 @@ class KeepAliveForegroundService : Service() {
 
     private fun registerSystemEventsReceiver() {
         val filter = IntentFilter().apply {
-            addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
-            addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
             addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
             addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
@@ -51,18 +49,6 @@ class KeepAliveForegroundService : Service() {
                 var iconResId = R.drawable.ic_stat_liveupdate
 
                 when (action) {
-                    BluetoothDevice.ACTION_ACL_CONNECTED -> {
-                        if (!prefs.getEventsBluetoothEnabled()) return
-                        title = "Connected"
-                        text = "Bluetooth"
-                        iconResId = R.drawable.ic_bluetooth
-                    }
-                    BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
-                        if (!prefs.getEventsBluetoothEnabled()) return
-                        title = "Disconnected"
-                        text = "Bluetooth"
-                        iconResId = R.drawable.ic_bluetooth
-                    }
                     BluetoothAdapter.ACTION_STATE_CHANGED -> {
                         if (!prefs.getEventsBluetoothEnabled()) return
                         val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
@@ -96,13 +82,21 @@ class KeepAliveForegroundService : Service() {
                     WifiManager.NETWORK_STATE_CHANGED_ACTION -> {
                         if (!prefs.getEventsWifiEnabled()) return
                         val networkInfo = intent.getParcelableExtra<NetworkInfo>(WifiManager.EXTRA_NETWORK_INFO)
+                        val ssid = try {
+                            val wifiManager = context.applicationContext
+                                .getSystemService(Context.WIFI_SERVICE) as? WifiManager
+                            wifiManager?.connectionInfo?.ssid
+                                ?.removeSurrounding("\"")
+                                ?.takeIf { it.isNotBlank() && it != "<unknown ssid>" }
+                        } catch (_: Exception) { null } ?: "Wi-Fi"
+
                         if (networkInfo?.isConnected == true) {
                             title = "Connected"
-                            text = "Wi-Fi"
+                            text = ssid
                             iconResId = R.drawable.ic_wifi
                         } else if (networkInfo?.state == NetworkInfo.State.DISCONNECTED) {
                             title = "Disconnected"
-                            text = "Wi-Fi"
+                            text = ssid
                             iconResId = R.drawable.ic_wifi
                         } else {
                             return

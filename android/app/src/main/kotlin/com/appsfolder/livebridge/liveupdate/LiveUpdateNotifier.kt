@@ -78,9 +78,14 @@ object LiveUpdateNotifier {
     private val otpAnimationGenerations = mutableMapOf<String, Long>()
     private val smartAnimationGenerations = mutableMapOf<String, Long>()
     private val smartAnimationStates = mutableMapOf<String, SmartAnimationState>()
+    private var currentSyntheticMediaSession: android.media.session.MediaSession? = null
 
     fun triggerSyntheticSystemEvent(context: Context, title: String, text: String, iconResId: Int) {
         val manager = NotificationManagerCompat.from(context)
+
+        // Release any previous session
+        currentSyntheticMediaSession?.release()
+        currentSyntheticMediaSession = null
         
         val intent = android.content.Intent(context, com.appsfolder.livebridge.MainActivity::class.java).apply {
             flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -100,14 +105,13 @@ object LiveUpdateNotifier {
             .setOnlyAlertOnce(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-            .setProgress(0, 0, true)
-            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setRequestPromotedOngoing(true)
             .setContentIntent(pendingIntent)
             
         manager.notify(SYNTHETIC_SYSTEM_EVENT_ID, builder.build())
         
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+        mainHandler.postDelayed({
             manager.cancel(SYNTHETIC_SYSTEM_EVENT_ID)
         }, SYNTHETIC_SYSTEM_EVENT_DURATION_MS)
     }
@@ -2303,16 +2307,18 @@ object LiveUpdateNotifier {
     private fun resolveAppSmallIcon(context: Context, packageName: String): IconCompat? {
         return try {
             val appInfo = context.packageManager.getApplicationInfo(packageName, 0)
-            if (appInfo.icon == 0) {
-                null
-            } else {
+            if (appInfo.icon == 0) return null
+
+            // Reject adaptive/mipmap launcher icons — they render as full-color blobs in the pill
+            val typeName = try {
                 val packageContext = context.createPackageContext(packageName, 0)
-                IconCompat.createWithResource(
-                    packageContext.resources,
-                    packageName,
-                    appInfo.icon
-                )
-            }
+                packageContext.resources.getResourceTypeName(appInfo.icon)
+            } catch (_: Exception) { "" }
+
+            if (typeName == "mipmap") return null  // Always a launcher icon, skip it
+
+            val packageContext = context.createPackageContext(packageName, 0)
+            IconCompat.createWithResource(packageContext.resources, packageName, appInfo.icon)
         } catch (_: Exception) {
             null
         }

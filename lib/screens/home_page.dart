@@ -78,6 +78,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
   bool _eventsAirplaneModeEnabled = true;
   bool _eventsUnlockedEnabled = true;
   int _eventsDurationMs = 3500;
+  int _bypassAlertDurationMs = 3000;
   bool _hyperBridgeEnabled = false;
   bool _notificationDedupEnabled = false;
   bool _onlyWithProgress = true;
@@ -251,6 +252,8 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
           await LiveBridgePlatform.getEventsUnlockedEnabled();
       final int eventsDurationMs = 
           await LiveBridgePlatform.getEventsDurationMs();
+      final int bypassAlertDurationMs =
+          await LiveBridgePlatform.getBypassDurationMs();
       final bool hyperBridgeEnabled =
           await LiveBridgePlatform.getHyperBridgeEnabled();
       final bool notificationDedupEnabled =
@@ -373,6 +376,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
         _eventsAirplaneModeEnabled = eventsAirplaneModeEnabled;
         _eventsUnlockedEnabled = eventsUnlockedEnabled;
         _eventsDurationMs = eventsDurationMs;
+        _bypassAlertDurationMs = bypassAlertDurationMs;
         _hyperBridgeEnabled = hyperBridgeEnabled;
         _notificationDedupEnabled = notificationDedupEnabled;
         _notificationDedupMode = notificationDedupMode;
@@ -565,6 +569,13 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     LiveBridgeHaptics.selection();
     setState(() => _eventsDurationMs = value);
     await LiveBridgePlatform.setEventsDurationMs(value);
+  }
+
+  Future<void> _setBypassAlertDuration(int value) async {
+    if (_bypassAlertDurationMs == value) return;
+    LiveBridgeHaptics.selection();
+    setState(() => _bypassAlertDurationMs = value);
+    await LiveBridgePlatform.setBypassDurationMs(value);
   }
 
   Future<void> _setAnimatedIsland(bool value) async {
@@ -1879,97 +1890,6 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
             ),
           ],
           const SizedBox(height: 8),
-          SwitchListTile.adaptive(
-            value: _updateChecksEnabled,
-            onChanged: _setUpdateChecksEnabled,
-            title: Text(
-              s.updateChecksTitle,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            subtitle: Text(
-              s.updateChecksSubtitle,
-              style: TextStyle(
-                color: colorScheme.onSurfaceVariant,
-                fontSize: 13,
-              ),
-            ),
-            contentPadding: EdgeInsets.zero,
-            activeThumbColor: colorScheme.primary,
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _dictionaryActionInProgress
-                  ? null
-                  : _updateParserDictionaryFromGithub,
-              icon: const Icon(Icons.system_update_alt_rounded, size: 18),
-              label: Text(s.updateDictionary),
-            ),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.tonalIcon(
-              onPressed: _dictionaryActionInProgress
-                  ? null
-                  : _downloadParserDictionary,
-              icon: const Icon(Icons.download_rounded, size: 18),
-              label: Text(s.downloadDictionary),
-            ),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _dictionaryActionInProgress
-                  ? null
-                  : _uploadParserDictionary,
-              icon: const Icon(Icons.upload_file_rounded, size: 18),
-              label: Text(s.uploadDictionary),
-            ),
-          ),
-          if (_hasCustomParserDictionary) ...<Widget>[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: _dictionaryActionInProgress
-                    ? null
-                    : _resetParserDictionary,
-                icon: const Icon(Icons.restart_alt_rounded, size: 18),
-                label: Text(s.resetDictionary),
-              ),
-            ),
-          ],
-          const SizedBox(height: 8),
-          if (_hasUpdateAlert) ...<Widget>[
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: colorScheme.errorContainer.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: colorScheme.error.withValues(alpha: 0.24),
-                  ),
-                ),
-                child: Text(
-                  s.updateAvailableBanner(_latestReleaseVersion),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colorScheme.error,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
           InkWell(
             borderRadius: BorderRadius.circular(14),
             onTap: _openGithub,
@@ -1977,56 +1897,34 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: _hasUpdateAlert
-                    ? colorScheme.errorContainer.withValues(alpha: 0.55)
-                    : colorScheme.surfaceContainerHighest.withValues(
-                        alpha: 0.3,
-                      ),
+                color: colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.3,
+                ),
                 borderRadius: BorderRadius.circular(14),
-                border: _hasUpdateAlert
-                    ? Border.all(
-                        color: colorScheme.error.withValues(alpha: 0.28),
-                        width: 1.1,
-                      )
-                    : null,
               ),
               child: Row(
                 children: <Widget>[
                   Icon(
                     Icons.code_rounded,
                     size: 20,
-                    color: _hasUpdateAlert
-                        ? colorScheme.error
-                        : colorScheme.onSurfaceVariant,
+                    color: colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      _hasUpdateAlert ? s.downloadPageUrl : s.githubUrl,
+                      s.githubUrl,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w600,
-                        color: _hasUpdateAlert ? colorScheme.error : null,
                       ),
                     ),
                   ),
                   Icon(
                     Icons.open_in_new_rounded,
                     size: 18,
-                    color: _hasUpdateAlert
-                        ? colorScheme.error
-                        : colorScheme.onSurfaceVariant,
+                    color: colorScheme.onSurfaceVariant,
                   ),
                 ],
               ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _openBugReport,
-              icon: const Icon(Icons.bug_report_rounded, size: 18),
-              label: Text(s.reportBug),
             ),
           ),
         ],
@@ -2616,6 +2514,42 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
           Text(
             s.bypassRulesSubtitle,
             style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Bypass Alert Duration Timeout',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          LiveBridgeToggleSelector<int>(
+            value: _bypassAlertDurationMs,
+            options: const <SelectorOption<int>>[
+              SelectorOption<int>(
+                value: 0,
+                title: 'Infinite',
+              ),
+              SelectorOption<int>(
+                value: 2000,
+                title: '2s',
+              ),
+              SelectorOption<int>(
+                value: 3000,
+                title: '3s',
+              ),
+              SelectorOption<int>(
+                value: 4000,
+                title: '4s',
+              ),
+              SelectorOption<int>(
+                value: 5000,
+                title: '5s',
+              ),
+              SelectorOption<int>(
+                value: 7000,
+                title: '7s',
+              ),
+            ],
+            onChanged: _setBypassAlertDuration,
           ),
           const SizedBox(height: 16),
           _selectedAppsNote(

@@ -143,6 +143,12 @@ class MainActivity : FlutterActivity() {
                 prefs.setEventsDurationMs(value)
                 res.success(true)
             }
+            "getBypassDurationMs" -> res.success(prefs.getBypassDurationMs())
+            "setBypassDurationMs" -> {
+                val value = call.argument<Number>("value")?.toLong() ?: 3000L
+                prefs.setBypassDurationMs(value)
+                res.success(true)
+            }
 
             "getBackgroundWarningDismissed" -> res.success(prefs.getBackgroundWarningDismissed())
             "setBackgroundWarningDismissed" -> {

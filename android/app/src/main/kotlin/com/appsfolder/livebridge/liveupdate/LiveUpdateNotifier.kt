@@ -222,7 +222,7 @@ object LiveUpdateNotifier {
                     smartShortTextOverride = null,
                     allowNavigationIconHeuristics = false
                 )
-                return mirroredResult()
+                return mirroredResult(dedupKind = MirrorDedupKind.BYPASS)
             }
             val parserDictionary = LiveParserDictionaryLoader.get(context, prefs)
             val mediaPlaybackSmartEnabled = prefs.getSmartMediaPlaybackEnabled()
@@ -910,6 +910,11 @@ object LiveUpdateNotifier {
 
         if (requestPromoted) {
             builder.setRequestPromotedOngoing(true)
+        }
+        
+        val bypassTimeoutMs = ConverterPrefs(context).getBypassDurationMs()
+        if (bypassTimeoutMs > 0L) {
+            builder.setTimeoutAfter(bypassTimeoutMs)
         }
 
         if (otpOverride != null) {
@@ -3406,7 +3411,8 @@ object LiveUpdateNotifier {
     enum class MirrorDedupKind {
         NONE,
         OTP,
-        STATUS
+        STATUS,
+        BYPASS
     }
 
     private data class SmartStageMatch(

@@ -106,7 +106,7 @@ bool _isSameStandaloneAppPresentationOverride(
 ) {
   return a.compactTextSource == b.compactTextSource &&
       a.iconSource == b.iconSource &&
-      a.liveDurationTimeoutMs == b.liveDurationTimeoutMs;
+        a.liveDurationTimeoutMs == b.liveDurationTimeoutMs;
 }
 
 _ParsedAppPresentationOverrides _parseStandaloneAppPresentationOverrides(
@@ -969,12 +969,16 @@ class _AppPresentationEditorSheetState
                   title: '3s',
                 ),
                 const SelectorOption<int>(
+                  value: 4000,
+                  title: '4s',
+                ),
+                const SelectorOption<int>(
                   value: 5000,
                   title: '5s',
                 ),
                 const SelectorOption<int>(
-                  value: 15000,
-                  title: '15s',
+                  value: 7000,
+                  title: '7s',
                 ),
               ],
               onChanged: (int next) {

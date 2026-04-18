@@ -187,6 +187,20 @@ class LiveUpdateNotificationListenerService : NotificationListenerService() {
         if (!result.mirrored) {
             return
         }
+
+        if (result.dedupKind == LiveUpdateNotifier.MirrorDedupKind.BYPASS) {
+            if (sbn.isClearable) {
+                rememberSelfDismissedSourceKey(sbn.key)
+                try {
+                    cancelNotification(sbn.key)
+                } catch (error: Throwable) {
+                    forgetSelfDismissedSourceKey(sbn.key)
+                    Log.e(TAG, "Failed to auto-dismiss bypass notification: ${sbn.key}", error)
+                }
+            }
+            return
+        }
+
         if (!prefs.getNotificationDedupEnabled()) {
             return
         }

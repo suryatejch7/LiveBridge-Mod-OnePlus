@@ -262,6 +262,13 @@ class LiveBridgePlatform {
   static Future<bool> setEventsDurationMs(int value) =>
       _askBool('setEventsDurationMs', {'value': value});
 
+  static Future<int> getBypassDurationMs() async {
+    return await _askInt('getBypassDurationMs') ?? 3000;
+  }
+
+  static Future<bool> setBypassDurationMs(int value) =>
+      _askBool('setBypassDurationMs', {'value': value});
+
   static Future<bool> getBackgroundWarningDismissed() =>
       _askBool('getBackgroundWarningDismissed');
   static Future<bool> setBackgroundWarningDismissed(bool value) =>

@@ -79,7 +79,7 @@ object LiveUpdateNotifier {
     private val smartAnimationStates = mutableMapOf<String, SmartAnimationState>()
     private var currentSyntheticMediaSession: android.media.session.MediaSession? = null
 
-    fun triggerSyntheticSystemEvent(context: Context, title: String, text: String, iconResId: Int) {
+    fun triggerSyntheticSystemEvent(context: Context, title: String, text: String, iconResId: Int, customDurationMs: Long? = null) {
         val manager = NotificationManagerCompat.from(context)
 
         // Release any previous session
@@ -110,7 +110,7 @@ object LiveUpdateNotifier {
             
         manager.notify(SYNTHETIC_SYSTEM_EVENT_ID, builder.build())
         
-        val durationMs = ConverterPrefs(context).getEventsDurationMs()
+        val durationMs = customDurationMs ?: ConverterPrefs(context).getEventsDurationMs()
 
         mainHandler.postDelayed({
             manager.cancel(SYNTHETIC_SYSTEM_EVENT_ID)

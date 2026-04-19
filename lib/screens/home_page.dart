@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_strings.dart';
@@ -92,6 +93,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
   bool _smartVpnEnabled = true;
   bool _otpDetectionEnabled = true;
   bool _otpAutoCopyEnabled = false;
+  int _otpDurationMs = 4000;
   bool _hasCustomParserDictionary = false;
   bool _dictionaryActionInProgress = false;
   bool _showBackgroundWarning = false;
@@ -284,6 +286,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
           await LiveBridgePlatform.getOtpDetectionEnabled();
       final bool otpAutoCopyEnabled =
           await LiveBridgePlatform.getOtpAutoCopyEnabled();
+      final int otpDurationMs = await LiveBridgePlatform.getOtpDurationMs();
       final bool updateChecksEnabled =
           await LiveBridgePlatform.getUpdateChecksEnabled();
       final bool updateCachedAvailable =
@@ -392,6 +395,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
         _smartVpnEnabled = smartVpnEnabled;
         _otpDetectionEnabled = otpDetectionEnabled;
         _otpAutoCopyEnabled = otpAutoCopyEnabled;
+        _otpDurationMs = otpDurationMs;
         _updateChecksEnabled = updateChecksEnabled;
         _updateAvailable = normalizedCachedUpdateAvailable;
         _latestReleaseVersion = updateCachedLatestVersion;
@@ -1177,6 +1181,7 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
     LiveBridgeHaptics.confirm();
     final bool granted =
         await LiveBridgePlatform.requestNotificationPermission();
+    await Permission.sms.request();
     if (!mounted) return;
     final AppStrings s = AppStrings.of(context);
     _snack(granted ? s.permissionGranted : s.permissionDenied);
@@ -2756,6 +2761,44 @@ class _LiveBridgeHomePageState extends State<LiveBridgeHomePage>
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Divider(height: 1),
           ),
+          const Text(
+            'Timeout',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          LiveBridgeToggleSelector<int>(
+            value: _otpDurationMs,
+            options: const <SelectorOption<int>>[
+              SelectorOption<int>(
+                value: 3000,
+                title: '3s',
+              ),
+              SelectorOption<int>(
+                value: 4000,
+                title: '4s',
+              ),
+              SelectorOption<int>(
+                value: 5000,
+                title: '5s',
+              ),
+              SelectorOption<int>(
+                value: 7000,
+                title: '7s',
+              ),
+              SelectorOption<int>(
+                value: 9000,
+                title: '9s',
+              ),
+            ],
+            onChanged: (int? value) {
+              if (value != null) {
+                LiveBridgeHaptics.selection();
+                setState(() => _otpDurationMs = value);
+                unawaited(LiveBridgePlatform.setOtpDurationMs(value));
+              }
+            },
+          ),
+          const SizedBox(height: 16),
           AnimatedOpacity(
             duration: const Duration(milliseconds: 200),
             opacity: _otpDetectionEnabled ? 1 : 0.4,

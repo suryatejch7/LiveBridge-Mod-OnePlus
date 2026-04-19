@@ -182,6 +182,10 @@ class LiveBridgePlatform {
   static Future<bool> setOtpAutoCopyEnabled(bool value) =>
       _askBool('setOtpAutoCopyEnabled', {'value': value});
 
+  static Future<int> getOtpDurationMs() => _askInt('getOtpDurationMs');
+  static Future<bool> setOtpDurationMs(int value) =>
+      _askBool('setOtpDurationMs', {'value': value});
+
   static Future<String> getOtpPackageRules() => _askStr('getOtpPackageRules');
   static Future<bool> setOtpPackageRules(String value) =>
       _askBool('setOtpPackageRules', {'value': value});

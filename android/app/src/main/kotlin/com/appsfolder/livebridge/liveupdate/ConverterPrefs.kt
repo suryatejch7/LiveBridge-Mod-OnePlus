@@ -314,6 +314,9 @@ class ConverterPrefs(context: Context) {
         prefs.edit().putString(KEY_OTP_PACKAGE_MODE, mode.id).apply()
     }
 
+    fun getOtpDurationMs(): Long = prefs.getLong(KEY_OTP_DURATION_MS, 4000L)
+    fun setOtpDurationMs(value: Long) = prefs.edit().putLong(KEY_OTP_DURATION_MS, value).apply()
+
     fun getPixelJokeBypassEnabled(): Boolean {
         return prefs.getBoolean(KEY_PIXEL_JOKE_BYPASS_ENABLED, false)
     }
@@ -522,6 +525,7 @@ class ConverterPrefs(context: Context) {
         private const val KEY_OTP_AUTO_COPY_ENABLED = "otp_auto_copy_enabled"
         private const val KEY_OTP_PACKAGE_RULES = "otp_package_rules"
         private const val KEY_OTP_PACKAGE_MODE = "otp_package_mode"
+        private const val KEY_OTP_DURATION_MS = "otp_duration_ms"
 
         private const val KEY_EVENTS_BLUETOOTH_ENABLED = "events_bluetooth_enabled"
         private const val KEY_EVENTS_WIFI_ENABLED = "events_wifi_enabled"

@@ -468,6 +468,13 @@ class MainActivity : FlutterActivity() {
                 res.success(true)
             }
 
+            "getOtpDurationMs" -> res.success(prefs.getOtpDurationMs())
+            "setOtpDurationMs" -> {
+                val value = call.argument<Int>("value")?.toLong() ?: 4000L
+                prefs.setOtpDurationMs(value)
+                res.success(true)
+            }
+
             "getOtpPackageRules" -> res.success(prefs.getOtpPackageRulesRaw())
             "setOtpPackageRules" -> {
                 prefs.setOtpPackageRulesRaw(call.argument<String>("value"))
